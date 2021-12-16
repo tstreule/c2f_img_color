@@ -1,0 +1,10 @@
+# Byte-compiled
+__pycache__/
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IntelliJ IDEA
+.idea/
+
+# Temporary stuff
+*test*
