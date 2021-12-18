@@ -1,4 +1,5 @@
-from typing import Union
+from typing import Optional, Union
+from numpy.typing import ArrayLike
 from pathlib import Path
 
 from PIL import Image
@@ -18,17 +19,15 @@ class URLs(FastAIURLs):
 
 class ColorizationDataset(Dataset):
 
-    def __init__(self, paths, split="train"):
+    def __init__(self, paths: ArrayLike, split: Optional[str] = "train"):
         """
         A PyTorch Dataset for color images.
 
-        Parameters
-        ----------
-        paths : array-like
-            A list containing all image paths.
-        split : str, optional
-            Determines the type of image transforms that will be applied.
+        Args:
+            paths: A list containing all image paths.
+            split: Determines the type of image transforms that will be applied.
         """
+
         assert split in ("train", "test", "val"), f"Invalid option '{split}'"
 
         transforms = []

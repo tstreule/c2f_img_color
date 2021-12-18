@@ -1,4 +1,4 @@
-from typing import Iterable
+from numpy.typing import ArrayLike
 import time
 import matplotlib.pyplot as plt
 
@@ -10,23 +10,22 @@ import torchvision.transforms as T
 
 
 class LabImage:
-    """
-    Data container for L*a*b images which quick and easy can be converted
-    to RGB and vice versa.
 
-    Parameters
-    ----------
-    lab : array-like, optional
-        L*a*b data array.
-    rgb : array-like, optional
-        RGB data array.
-    L : array-like, optional
-        L-part of L*a*b data array. Has no effect when `ab` parameter is None!
-    ab : array-like, optional
-        ab-part of L*a*b data array. Has no effect when `L` parameter is None!
-    """
+    def __init__(self, lab: ArrayLike = None, rgb: ArrayLike = None,
+                 L: ArrayLike = None, ab: ArrayLike = None):
+        """
+        Data container for L*a*b images which quick and easy can be converted
+        to RGB and vice versa.
 
-    def __init__(self, lab=None, rgb=None, L=None, ab=None):
+        Args:
+            lab: L*a*b data array.
+            rgb: RGB data array.
+            L: `L`-part of L*a*b data array.
+                Has no effect when `ab` parameter is None!
+            ab: `ab`-part of L*a*b data array.
+                Has no effect when `L` parameter is None!
+        """
+
         self._lab: np.ndarray
         self.from_lab(lab) if (lab is not None) else None
         self.from_rgb(rgb) if (rgb is not None) else None
@@ -85,20 +84,20 @@ class LabImage:
 
 
 class LabImageBatch:
-    """
-    Data batch container for L*a*b images which quick and easy can be
-    converted to RGB and vice versa.
 
-    Parameters
-    ----------
-    batch : Iterable[LabImage]
-    """
+    def __init__(self, batch: list[LabImage]):
+        """
+        Data batch container for L*a*b images which quick and easy can be
+        converted to RGB and vice versa.
 
-    def __init__(self, batch):
+        Args:
+            batch: An iterable containing `LabImage`s.
+        """
+
         self.batch: list[LabImage] = []
         self._collate(batch)
 
-    def _collate(self, batch, size_criterion=np.max):
+    def _collate(self, batch: list[LabImage], size_criterion: callable = np.max):
         assert all([isinstance(elem, LabImage) for elem in batch])
 
         # Create image cropper s.t. all images in batch have same size
