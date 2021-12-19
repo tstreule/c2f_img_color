@@ -3,18 +3,15 @@ from numpy.typing import ArrayLike
 from pathlib import Path
 
 from PIL import Image
-from fastai.data.external import untar_data, URLs as FastAIURLs
+from fastai.data.external import untar_data, URLs
 
 import numpy as np
-import torch
 import torchvision.transforms as T
 from torch.utils.data import Dataset, DataLoader
 
-from src.utils.image import LabImage, LabImageBatch
+from .image import *
 
-
-class URLs(FastAIURLs):
-    pass
+__all__ = ["URLs", "ColorizationDataset", "make_dataloader", "get_image_paths"]
 
 
 class ColorizationDataset(Dataset):
@@ -30,7 +27,9 @@ class ColorizationDataset(Dataset):
 
         assert split in ("train", "test", "val"), f"Invalid option '{split}'"
 
-        transforms = []
+        transforms = [
+            # T.Resize((128, 128), T.InterpolationMode.BICUBIC)  # Uncomment for significant speed up
+        ]
         if split == "train":
             transforms.extend([
                 T.RandomHorizontalFlip(),  # a little data augmentation!

@@ -1,5 +1,6 @@
 from numpy.typing import ArrayLike
 import time
+import warnings
 import matplotlib.pyplot as plt
 
 from skimage.color import rgb2lab, lab2rgb
@@ -7,6 +8,9 @@ from skimage.color import rgb2lab, lab2rgb
 import numpy as np
 import torch
 import torchvision.transforms as T
+
+
+__all__ = ["LabImage", "LabImageBatch"]
 
 
 class LabImage:
@@ -38,6 +42,9 @@ class LabImage:
         return self
 
     def from_lab(self, lab):
+        lab = np.array(lab)
+        if len(lab) == 3:  # (3, n, n)
+            lab = lab.transpose((1, 2, 0))
         return self._store(lab=lab)
 
     def from_rgb(self, rgb):
@@ -48,33 +55,41 @@ class LabImage:
     def from_L_ab(self, L, ab):
         L = (L + 1.0) * 50.0
         ab = ab * 110.0
-        lab = np.concatenate([L, ab], axis=-1)
+        lab = np.concatenate([L, ab], axis=0)
         return self.from_lab(lab)
 
     # === Data Getter ===
 
+    def __str__(self):
+        cname = self.__class__.__name__
+        return f"{cname}{self._lab.shape}"
+
     @property
     def rgb(self):
-        rgb = lab2rgb(self._lab)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            # warnings.filterwarnings("ignore", "UserWarning")
+            # Ignore UserWarning: Color data out of range: Z < 0
+            rgb = lab2rgb(self._lab)
         return torch.tensor(rgb)
 
     @property
     def lab(self):
-        return torch.tensor(self._lab)
+        return torch.tensor(self._lab).permute(2, 0, 1)
 
     @property
     def L(self):
-        return self.lab[:, :, 0].unsqueeze(-1) / 50. - 1.  # between -1 and 1
+        return self.lab[[0], ...] / 50. - 1.  # between -1 and 1
 
     @property
     def ab(self):
-        return self.lab[:, :, 1:] / 110.  # between -1 and 1
+        return self.lab[[1, 2], ...] / 110.  # between -1 and 1
 
     # === Other ===
 
     def visualize(self, save=False):
         fig, axs = plt.subplots(1, 2, figsize=(6, 3))
-        axs[0].imshow(self.L.numpy(), cmap="gray")
+        axs[0].imshow(self.L[0].numpy(), cmap="gray")
         axs[1].imshow(self.rgb.numpy())
         [ax.axis("off") for ax in axs]
         fig.tight_layout()
@@ -85,17 +100,23 @@ class LabImage:
 
 class LabImageBatch:
 
-    def __init__(self, batch: list[LabImage]):
+    def __init__(self, batch: list[LabImage] = None,
+                 L: torch.Tensor = None, ab: torch.Tensor = None):
         """
         Data batch container for L*a*b images which quick and easy can be
         converted to RGB and vice versa.
 
         Args:
-            batch: An iterable containing `LabImage`s.
+            batch: An iterable containing `LabImage`s
+            L: 4D Tensor with `LabImage.L` attributes
+            ab: 4D Tensor with `LabImage.ab` attributes
         """
 
         self.batch: list[LabImage] = []
-        self._collate(batch)
+        if batch is not None:
+            self._collate(batch)
+        elif (L is not None) and (ab is not None):
+            self.from_L_ab(L, ab)
 
     def _collate(self, batch: list[LabImage], size_criterion: callable = np.max):
         assert all([isinstance(elem, LabImage) for elem in batch])
@@ -106,11 +127,17 @@ class LabImageBatch:
         cropper = T.RandomCrop(size=size, pad_if_needed=True)
 
         # Store cropped (or padded) images and return
-        batch = [LabImage(lab=cropper(img.lab.permute(2, 0, 1)).permute(1, 2, 0))
+        batch = [LabImage(lab=cropper(img.lab))
                  for img in batch]
         self.batch = batch
 
         return self
+
+    # === Data Setter ===
+
+    def from_L_ab(self, L, ab):
+        batch = [LabImage(L=L_.detach(), ab=ab_.detach()) for L_, ab_ in zip(L, ab)]
+        self.batch = batch
 
     # === Data Getter ===
 
@@ -120,22 +147,22 @@ class LabImageBatch:
     @property
     def lab(self):
         labs = [img.lab for img in self.batch]  # collate
-        return torch.cat(labs, dim=0)
+        return torch.stack(labs, dim=0)
 
     @property
     def rgb(self):
         rgbs = [img.rgb for img in self.batch]  # collate
-        return torch.cat(rgbs, dim=0)
+        return torch.stack(rgbs, dim=0)
 
     @property
     def L(self):
         Ls = [img.L for img in self.batch]  # collate
-        return torch.cat(Ls, dim=0)
+        return torch.stack(Ls, dim=0)
 
     @property
     def ab(self):
         abs_ = [img.ab for img in self.batch]  # collate
-        return torch.cat(abs_, dim=0)
+        return torch.stack(abs_, dim=0)
 
     @property
     def batch_size(self):
@@ -143,13 +170,19 @@ class LabImageBatch:
 
     # === Other ===
 
-    def visualize(self, draw_n=None, save=False):
+    def visualize(self, other=None, draw_n=None, save=False):
+        other: LabImageBatch
+        n_rows = 3 if other else 2
+
         if not draw_n or not (0 < draw_n < self.batch_size):
             draw_n = self.batch_size
-        fig, axs = plt.subplots(2, draw_n, figsize=(3*draw_n, 6))
+
+        fig, axs = plt.subplots(n_rows, draw_n, figsize=(3*draw_n, 3*n_rows))
         for i, ax_ in enumerate(axs.T):
-            ax_[0].imshow(self[i].L.numpy(), cmap="gray")
+            ax_[0].imshow(self[i].L[0].numpy(), cmap="gray")
             ax_[1].imshow(self[i].rgb.numpy())
+            if other:
+                ax_[2].imshow(other[i].rgb.numpy())
             [ax.axis("off") for ax in ax_]
         fig.tight_layout()
         fig.show()
