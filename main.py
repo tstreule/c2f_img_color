@@ -7,7 +7,7 @@ from src.gan import ImageGAN
 from src.generator import *
 from src.utils.image import *
 from src.utils.dataset import *
-from src.utils.checkpoint import set_checkpoint_args
+from src.utils.checkpoint import load_model, save_model, secure_cp_path
 
 import argparse
 
@@ -24,23 +24,25 @@ parser.add_argument("--batch-size", type=int, default=16,
                     help="batch size of data loaders")
 parser.add_argument("--num-workers", type=int, default=4,
                     help="number of workers for data loaders")
-# Training parameters
+# Checkpoints
+parser.add_argument("--cp-dir", type=str, default="checkpoints/",
+                    help="all model checkpoints land in this directory")
+parser.add_argument("--cp-overwrite", dest="cp_overwrite", action="store_true",
+                    help="overwrite model checkpoints if name already exists")
+parser.add_argument("--cp-not-overwrite", dest="cp_overwrite", action="store_false")
+parser.set_defaults(cp_overwrite=True)
+# U-Net
+parser.add_argument("--unet-cp", type=str, default=None,
+                    help="relative path to U-Net checkpoint; will be joined with `--cp-dir`")
 parser.add_argument("--unet-size", type=int, default=128,
                     help="size of U-Net")
-parser.add_argument("--num-unet-epochs", type=int, default=20,
+parser.add_argument("--unet-num-epochs", type=int, default=20,
                     help="number of training epochs for U-Net")
-parser.add_argument("--num-gan-epochs", type=int, default=20,
+# Image GAN
+parser.add_argument("--gan-cp", type=str, default=None,
+                    help="relative path to ImageGAN checkpoint; will be joined with `--cp-dir`")
+parser.add_argument("--gan-num-epochs", type=int, default=20,
                     help="number of training epochs for ImageGAN")
-# Checkpoints: for checkpoints use either single or triple argument
-parser.add_argument("--unet-checkpoint", type=str, default="basic/unet", nargs="+",
-                    help="default folder for saving U-Net checkpoints")
-parser.add_argument("--gan-checkpoint", type=str, default="basic/gan", nargs="+",
-                    help="default folder for saving ImageGAN checkpoints")
-parser.add_argument("--pretrained", dest="from_pretrained", action="store_true",
-                    help="use pretrained ImageGAN (from `--gan-checkpoint`)")
-parser.add_argument("--not-pretrained", dest="from_pretrained", action="store_false",
-                    help="do not use a pretrained model")
-parser.set_defaults(from_pretrained=False)
 args = parser.parse_args()
 
 
@@ -54,44 +56,62 @@ torch_rng.manual_seed(209384575)
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Uncomment when you want hard-coded parse args
-    # args = "--dataset-size 32 --num-unet-epochs 1 --num-gan-epochs 1 --pretrained"
-    # args = parser.parse_args(args.split())
-    print("Passed arguments:")
-    print(", ".join([f"{arg}={getattr(args, arg)}" for arg in vars(args)]), "\n")
+    # ---------------------------
+    # Argument Parser
 
+    # Uncomment when you want hard-coded parse args
+    hard_args = "--dataset-size 32 --unet-num-epochs 1 --gan-num-epochs 1 "
+    hard_args += "--cp-dir checkpoints/base/ "
+    hard_args += "--unet-cp unet_final.pt "
+    hard_args += "--gan-cp gan_final.pt "
+    args = parser.parse_args(hard_args.split())
+
+    print_args = [f"{a}={getattr(args, a)}" for a in vars(args)]
+    print("Passed arguments:", ", ".join(print_args), "\n")
+
+    # ---------------------------
     # Create dataset and dataloaders
-    print("Getting dataset")
+
+    print("Getting dataset...")
     train_paths, test_paths = get_image_paths(args.dataset, args.dataset_size, test=args.test_split)
     train_dl = make_dataloader(args.batch_size, args.num_workers,
                                paths=train_paths, split="train", rng=torch_rng)
     val_dl = make_dataloader(args.batch_size, args.num_workers,
                              paths=test_paths, split="test")
-    print("Done\n")
+    print(" ...done\n")
 
     # ---------------------------
     # Training
 
-    if not args.from_pretrained:
-        # Pre-train generator
-        print("Pretraining generator")
+    if args.gan_cp is None:
+        # Pretrain generator
         generator = build_res_u_net(n_input=1, n_output=2, size=args.unet_size)
-        pretrain_generator(generator, train_dl, epochs=args.num_unet_epochs,
-                           load_from_checkpoint=False, checkpoint=args.unet_checkpoint)
-        print("Done\n")
+        if args.unet_cp is None:
+            print("Pretraining generator...")
+            unet_cps = (args.cp_dir + "unet", 10, args.cp_overwrite)
+            pretrain_generator(generator, train_dl, epochs=args.unet_num_epochs, checkpoints=unet_cps)
+            unet_save = secure_cp_path(args.cp_dir + "unet_final")
+            save_model(generator, unet_save, overwrite=args.cp_overwrite)
+        else:
+            print("Loading generator from checkpoint...")
+            load_model(generator, args.cp_dir + args.unet_cp)
+        print(" ...done\n")
 
         # Train with GAN training agent
-        print("Training GAN")
+        print("Training GAN...")
         agent = ImageGAN(gen_net=generator)
-        agent.train(train_dl, epochs=args.num_gan_epochs, checkpoint=args.gan_checkpoint)
-        print("Done\n")
+        gan_cps = (args.cp_dir + "gan_final", 10, args.cp_overwrite)
+        agent.train(train_dl, epochs=args.gan_num_epochs, checkpoints=gan_cps)
+        gan_save = secure_cp_path(args.cp_dir + "gan_final")
+        agent.save_model(gan_save, overwrite=args.cp_overwrite)
 
     else:
-        # Load from checkpoint
-        print("Load GAN from checkpoint")
+        # Load GAN from checkpoint
+        print("Loading GAN from checkpoint...")
         agent = ImageGAN()
-        agent.load_model(args.gan_checkpoint+"_epoch_01_final.pt")
-        print("Done\n")
+        agent.load_model(args.cp_dir + args.gan_cp)
+
+    print(" ...done\n")
 
     # ---------------------------
     # Evaluation
@@ -105,6 +125,7 @@ def main():
     pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L.to(device)).to("cpu"))
     pred_imgs.padding = real_imgs.padding
     pred_imgs.visualize(other=real_imgs, save=True)
+    pred_imgs[0].visualize(real_imgs[0], save=True)
 
 
 if __name__ == "__main__":

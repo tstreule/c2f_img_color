@@ -15,6 +15,9 @@ from torchvision.transforms.functional import crop as T_functional_crop
 __all__ = ["LabImage", "LabImageBatch"]
 
 
+_IMG_SIZE = 2
+
+
 class LabImage:
 
     def __init__(self, lab: ArrayLike = None, rgb: ArrayLike = None,
@@ -89,13 +92,19 @@ class LabImage:
 
     # === Other ===
 
-    def visualize(self, save=False):
-        fig, axs = plt.subplots(1, 2, figsize=(6, 3))
+    def visualize(self, other=None, show=True, save=False):
+        other: LabImage
+        n_imgs = 3 if other else 2
+
+        fig, axs = plt.subplots(1, n_imgs, figsize=(n_imgs*_IMG_SIZE, _IMG_SIZE))
         axs[0].imshow(self.L[0].numpy(), cmap="gray")
         axs[1].imshow(self.rgb.numpy())
+        if other:
+            axs[2].imshow(other.rgb.numpy())
         [ax.axis("off") for ax in axs]
         fig.tight_layout()
-        fig.show()
+        if show:
+            fig.show()
         if save:
             Path("imgs").mkdir(exist_ok=True)
             fig.savefig(f"imgs/colorization_{time.time()}.png")
@@ -191,14 +200,14 @@ class LabImageBatch:
 
     # === Other ===
 
-    def visualize(self, other=None, draw_n=None, save=False):
+    def visualize(self, other=None, show=True, save=False, draw_n=6):
         other: LabImageBatch
         n_rows = 3 if other else 2
 
         if not draw_n or not (0 < draw_n < self.batch_size):
             draw_n = self.batch_size
 
-        fig, axs = plt.subplots(n_rows, draw_n, figsize=(3*draw_n, 3*n_rows))
+        fig, axs = plt.subplots(n_rows, draw_n, figsize=(draw_n*_IMG_SIZE, n_rows*_IMG_SIZE))
         for i, ax_ in enumerate(axs.T):
             ax_[0].imshow(self[i].L[0].numpy(), cmap="gray")
             ax_[1].imshow(self[i].rgb.numpy())
@@ -206,7 +215,8 @@ class LabImageBatch:
                 ax_[2].imshow(other[i].rgb.numpy())
             [ax.axis("off") for ax in ax_]
         fig.tight_layout()
-        fig.show()
+        if show:
+            fig.show()
         if save:
             Path("imgs").mkdir(exist_ok=True)
             fig.savefig(f"imgs/colorization_{time.time()}.png")

@@ -198,7 +198,7 @@ class ImageGAN:
     # === Main training loop ===
 
     def train(self, train_dl: DataLoader[LabImageBatch], epochs=20, display_every=100,
-              checkpoint=None):
+              checkpoints=None):
         """
         Main training loop.
 
@@ -208,7 +208,7 @@ class ImageGAN:
             display_every: Log after `display_every` optimizing steps.
         """
 
-        checkpoint, cp_after_each, cp_overwrite = set_checkpoint_args(checkpoint)
+        checkpoint, cp_after_each, cp_overwrite = set_cp_args(checkpoints)
 
         for e in range(epochs):
             if self.epoch > e:
@@ -227,14 +227,12 @@ class ImageGAN:
                     # Visualize generated images
                     self.gen_net.eval()
                     pred_imgs = LabImageBatch(L=batch.L, ab=self.gen_net(batch.L.to(self._device)).to("cpu"))
-                    pred_imgs.visualize(other=batch, save=True)
+                    pred_imgs.visualize(other=batch, show=False, save=True)
                     self.gen_net.train()
 
             if checkpoint and (e + 1) % cp_after_each == 0:
-                self.save_model(checkpoint + f"_epoch_{e+1:02d}", cp_overwrite)
-
-        if checkpoint:
-            self.save_model(checkpoint + f"_epoch_{epochs:02d}_final", cp_overwrite)
+                path = secure_cp_path(checkpoint + f"_epoch_{e+1:02d}")
+                self.save_model(path, cp_overwrite)
 
     # === Save and load model ===
 
@@ -244,13 +242,13 @@ class ImageGAN:
                               for name, attr_name in save_dict["torch"].items()}
 
         if overwrite:
-            torch.save(save_dict, get_checkpoint_path(save_as))
+            torch.save(save_dict, secure_cp_path(save_as))
         else:
             warnings.warn(f"Model {save_as} not saved. Overwriting prohibited.")
 
     def load_model(self, load_from: str):
         save_dict = self.save_dict
-        checkpoint = torch.load(get_checkpoint_path(load_from))
+        checkpoint = torch.load(load_from)
 
         for name, attr_name in save_dict["torch"].items():
             getattr(self, attr_name).load_state_dict(checkpoint["torch"][name])
