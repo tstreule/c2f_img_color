@@ -102,6 +102,7 @@ def main():
     # Visualize example batch
     real_imgs = next(iter(val_dl))
     pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L.to(device)).to("cpu"))
+    pred_imgs.padding = real_imgs.padding
     pred_imgs.visualize(other=real_imgs, save="True")
 
 
