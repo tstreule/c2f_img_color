@@ -8,6 +8,7 @@ from skimage.color import rgb2lab, lab2rgb
 import numpy as np
 import torch
 import torchvision.transforms as T
+from torchvision.transforms.functional import crop as T_functional_crop
 
 
 __all__ = ["LabImage", "LabImageBatch"]
@@ -113,22 +114,29 @@ class LabImageBatch:
         """
 
         self.batch: list[LabImage] = []
+        self.padding: list[list[int]] = []  # padding for the left, top, right and bottom borders respectively
+
         if batch is not None:
             self._collate(batch)
         elif (L is not None) and (ab is not None):
             self.from_L_ab(L, ab)
 
     def _collate(self, batch: list[LabImage], size_criterion: callable = np.max):
-        assert all([isinstance(elem, LabImage) for elem in batch])
+        assert all([isinstance(img, LabImage) for img in batch])
 
         # Create image cropper s.t. all images in batch have same size
-        img_sizes = np.array([elem.rgb.shape[:2] for elem in batch])
-        size = size_criterion(img_sizes, axis=0).astype("int")
-        cropper = T.RandomCrop(size=size, pad_if_needed=True)
+        img_sizes = np.array([img.rgb.shape[:2] for img in batch])
+        if size_criterion == np.max:
+            size_diffs = - img_sizes + [size_criterion(img_sizes, axis=0)]
+            self.padding = [[0, 0, right_pad, bottom_pad] for bottom_pad, right_pad in size_diffs]
+            transforms = [T.Pad(padding=pad) for pad in self.padding]
+        else:
+            size = size_criterion(img_sizes, axis=0).astype("int")
+            transforms = [T.RandomCrop(size=size, pad_if_needed=True)
+                          for _ in range(len(batch))]
 
         # Store cropped (or padded) images and return
-        batch = [LabImage(lab=cropper(img.lab))
-                 for img in batch]
+        batch = [LabImage(lab=t(img.lab)) for t, img in zip(transforms, batch)]
         self.batch = batch
 
         return self
@@ -142,7 +150,11 @@ class LabImageBatch:
     # === Data Getter ===
 
     def __getitem__(self, item) -> LabImage:
-        return self.batch[item]
+        image = self.batch[item]
+        if self.padding:
+            width, height = np.array(image.lab.shape[1:]) - self.padding[item][2:]
+            image = LabImage(lab=T_functional_crop(image.lab, 0, 0, height, width))
+        return image
 
     @property
     def lab(self):

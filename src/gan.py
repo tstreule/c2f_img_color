@@ -123,9 +123,9 @@ class ImageGAN:
 
     # === Model updates ===
 
-    def optimize(self, L: torch.Tensor, ab: torch.Tensor):
-        L = L.to(self._device)
-        ab = ab.to(self._device)
+    def optimize(self, batch: LabImageBatch):
+        L = batch.L.to(self._device)
+        ab = batch.ab.to(self._device)
         real_imgs = torch.cat([L, ab], dim=1)
         fake_imgs = torch.cat([L, self.gen_net(L)], dim=1)
 
@@ -205,7 +205,7 @@ class ImageGAN:
             display_every: Log after `display_every` optimizing steps.
         """
 
-        checkpoint, cp_name, cp_after_each, cp_overwrite = set_checkpoint_vals(checkpoint)
+        checkpoint, cp_after_each, cp_overwrite = set_checkpoint_args(checkpoint)
 
         for e in range(epochs):
             if self.epoch > e:
@@ -215,7 +215,7 @@ class ImageGAN:
             self.reset_loss_meters()  # logging
 
             for i, batch in tqdm(enumerate(train_dl)):
-                self.optimize(batch.L, batch.ab)
+                self.optimize(batch)
 
                 if (i + 1) % display_every == 0:
                     print(f"\nEpoch {e+1}/{epochs}")
@@ -228,10 +228,10 @@ class ImageGAN:
                     self.gen_net.train()
 
             if checkpoint and (e + 1) % cp_after_each == 0:
-                self.save_model(cp_name + f"_epoch_{e+1:02d}", cp_overwrite)
+                self.save_model(checkpoint + f"_epoch_{e+1:02d}", cp_overwrite)
 
         if checkpoint:
-            self.save_model(cp_name + f"_epoch_{epochs:02d}_final", cp_overwrite)
+            self.save_model(checkpoint + f"_epoch_{epochs:02d}_final", cp_overwrite)
 
     # === Save and load model ===
 
