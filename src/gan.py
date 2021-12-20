@@ -166,10 +166,6 @@ class ImageGAN:
         self.update_loss_meters(loss_values, count=real_imgs.size(0))
         return gen_loss
 
-
-    def save_model(self):
-        torch.save(self.gen_net.state_dict(), "generator")
-        torch.save(self.dis_net.state_dict(), "dis")
     # === Logging ===
 
     @staticmethod
