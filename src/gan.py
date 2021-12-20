@@ -1,4 +1,5 @@
 from tqdm import tqdm
+import warnings
 
 import torch
 from torch import nn, optim
@@ -8,6 +9,7 @@ from .generator import build_res_u_net
 from .discriminator import PatchDiscriminator
 from .utils.image import LabImageBatch
 from .utils.utils import WelfordMeter
+from .utils.checkpoint import *
 
 
 __all__ = ["GANLoss", "ImageGAN"]
@@ -116,6 +118,7 @@ class ImageGAN:
         self._mae_crit = nn.L1Loss()
 
         # Logging
+        self.epoch = 0
         self.loss_meters = self._create_loss_meters()
 
     # === Model updates ===
@@ -171,7 +174,8 @@ class ImageGAN:
         return loss_meters
 
     def reset_loss_meters(self):
-        self.loss_meters = self._create_loss_meters()
+        for name, meter in self.loss_meters.items():
+            meter.reset()
 
     def update_loss_meters(self, update_dict: dict[str, float], count=1):
         update_dict = {name: float(value)  # detach tensor properties
@@ -188,7 +192,8 @@ class ImageGAN:
 
     # === Main training loop ===
 
-    def train(self, train_dl: DataLoader[LabImageBatch], epochs=20, display_every=100):
+    def train(self, train_dl: DataLoader[LabImageBatch], epochs=20, display_every=100,
+              checkpoint=None):
         """
         Main training loop.
 
@@ -198,7 +203,13 @@ class ImageGAN:
             display_every: Log after `display_every` optimizing steps.
         """
 
+        checkpoint, cp_name, cp_after_each, cp_overwrite = set_checkpoint_vals(checkpoint)
+
         for e in range(epochs):
+            if self.epoch > e:
+                continue
+            self.epoch = e
+
             self.reset_loss_meters()  # logging
 
             for i, batch in tqdm(enumerate(train_dl)):
@@ -213,3 +224,45 @@ class ImageGAN:
                     pred_imgs = LabImageBatch(L=batch.L, ab=self.gen_net(batch.L))
                     pred_imgs.visualize(other=batch, save=True)
                     self.gen_net.train()
+
+            if checkpoint and (e + 1) % cp_after_each == 0:
+                self.save_model(cp_name + f"_epoch_{e+1:02d}", cp_overwrite)
+
+        if checkpoint:
+            self.save_model(cp_name + f"_epoch_{epochs:02d}_final", cp_overwrite)
+
+    # === Save and load model ===
+
+    def save_model(self, save_as: str, overwrite=True):
+        save_dict = self.save_dict
+        save_dict["torch"] = {name: getattr(self, attr_name).state_dict()
+                              for name, attr_name in save_dict["torch"].items()}
+
+        if overwrite:
+            torch.save(save_dict, get_checkpoint_path(save_as))
+        else:
+            warnings.warn(f"Model {save_as} not saved. Overwriting prohibited.")
+
+    def load_model(self, load_from: str):
+        save_dict = self.save_dict
+        checkpoint = torch.load(get_checkpoint_path(load_from))
+
+        for name, attr_name in save_dict["torch"].items():
+            getattr(self, attr_name).load_state_dict(checkpoint["torch"][name])
+        for name, attr_name in save_dict["other"].items():
+            setattr(self, attr_name, checkpoint["other"][name])
+
+    @property
+    def save_dict(self):
+        return {
+            "torch": dict(
+                gen_model_state_dict="gen_net",
+                gen_optim_state_dict="_gen_opt",
+                dis_model_state_dict="dis_net",
+                dis_optim_state_dict="_dis_opt",
+            ),
+            "other": dict(
+                epoch="epoch",
+                loss_meters="loss_meters",
+            )
+        }

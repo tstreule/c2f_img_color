@@ -23,19 +23,30 @@ def main():
     # ---------------------------
     # Training
 
-    # Pre-train generator
-    generator = build_res_u_net(n_input=1, n_output=2, size=256)
-    pretrain_generator(generator, train_dl, epochs=1)
+    u_net_checkpoint = "basic/u_net"
+    gan_checkpoint = "basic/gan"
+    from_scratch = False
 
-    # Train with GAN training agent
-    agent = ImageGAN(gen_net=generator)
-    agent.train(train_dl, epochs=1)
+    if from_scratch:
+        # Pre-train generator
+        generator = build_res_u_net(n_input=1, n_output=2, size=256)
+        pretrain_generator(generator, train_dl, epochs=1,
+                           load_from_checkpoint=False, checkpoint=u_net_checkpoint)
+
+        # Train with GAN training agent
+        agent = ImageGAN(gen_net=generator)
+        agent.train(train_dl, epochs=1, checkpoint=gan_checkpoint)
+
+    else:
+        agent = ImageGAN()
+        agent.load_model(gan_checkpoint+"_epoch_01_final.pt")
 
     # ---------------------------
     # Evaluation
 
     # Retrieve trained generator
     generator = agent.gen_net
+    generator.eval()
 
     # Visualize example batch
     real_imgs = next(iter(val_dl))
