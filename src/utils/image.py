@@ -2,6 +2,7 @@ from numpy.typing import ArrayLike
 import time
 import warnings
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 from skimage.color import rgb2lab, lab2rgb
 
@@ -96,7 +97,8 @@ class LabImage:
         fig.tight_layout()
         fig.show()
         if save:
-            fig.savefig(f"colorization_{time.time()}.png")
+            Path("imgs").mkdir(exist_ok=True)
+            fig.savefig(f"imgs/colorization_{time.time()}.png")
 
 
 class LabImageBatch:
@@ -156,8 +158,12 @@ class LabImageBatch:
             image = LabImage(lab=T_functional_crop(image.lab, 0, 0, height, width))
         return image
 
-
-
+    def get_padding_mask(self):
+        mask = torch.zeros(self.lab.shape, dtype=torch.bool)
+        for i in range(mask.shape[0]):
+            width, height = np.array(self[i].lab.shape[1:]) - self.padding[i][2:]
+            mask[i, :, width:, height:] = 1
+        return mask
 
     @property
     def lab(self):
@@ -202,4 +208,5 @@ class LabImageBatch:
         fig.tight_layout()
         fig.show()
         if save:
-            fig.savefig(f"colorization_{time.time()}.png")
+            Path("imgs").mkdir(exist_ok=True)
+            fig.savefig(f"imgs/colorization_{time.time()}.png")
