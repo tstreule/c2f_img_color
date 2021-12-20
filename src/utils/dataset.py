@@ -29,7 +29,7 @@ class ColorizationDataset(Dataset):
 
         transforms = [
             # Uncomment for significant speed up
-            T.Resize((256, 256), T.InterpolationMode.BICUBIC),  # ATTENTION: This skews/distorts the images!
+            # T.Resize((256, 256), T.InterpolationMode.BICUBIC),  # ATTENTION: This skews/distorts the images!
         ]
         if split == "train":
             transforms.extend([

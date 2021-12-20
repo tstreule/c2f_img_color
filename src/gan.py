@@ -128,6 +128,9 @@ class ImageGAN:
         ab = batch.ab.to(self._device)
         real_imgs = torch.cat([L, ab], dim=1)
         fake_imgs = torch.cat([L, self.gen_net(L)], dim=1)
+        # Overwrite padding of fake_imgs with real_imgs
+        mask = batch.get_padding_mask()
+        fake_imgs[mask] = -1
 
         # Update discriminator
         self.dis_net.train()
