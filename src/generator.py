@@ -10,6 +10,7 @@ from fastai.vision.models.unet import DynamicUnet
 
 from .utils.image import LabImageBatch
 from .utils.utils import WelfordMeter
+from .utils.checkpoint import *
 
 
 __all__ = ["build_res_u_net", "pretrain_generator", "make_images"]
@@ -38,8 +39,15 @@ def build_res_u_net(n_input=1, n_output=2, size=256, arch="resnet18", pretrained
 
 
 def pretrain_generator(gen_net: nn.Module, train_dl: DataLoader[LabImageBatch],
-                       criterion=nn.L1Loss(), optimizer=None, epochs=20):
+                       criterion=nn.L1Loss(), optimizer=None, epochs=20,
+                       load_from_checkpoint=False, checkpoint=None):
     """Second pretraining step for generator"""
+
+    checkpoint, cp_name, cp_after_each, cp_overwrite = set_checkpoint_vals(checkpoint)
+    if checkpoint and load_from_checkpoint:
+        load_model(gen_net, cp_name)
+        return
+
     if not optimizer:
         optimizer = optim.Adam(gen_net.parameters(), lr=1e-4)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,6 +65,12 @@ def pretrain_generator(gen_net: nn.Module, train_dl: DataLoader[LabImageBatch],
 
         print(f"Epoch {e + 1}/{epochs}")
         print(f"L1 Loss: {loss_meter.mean:.5f} +- {loss_meter.std:.4f}")
+
+        if checkpoint and (e+1) % cp_after_each == 0:
+            save_model(gen_net, cp_name + f"_epoch_{e+1:02d}")
+
+    if checkpoint:
+        save_model(gen_net, cp_name + f"_epoch_{epochs:02d}_final")
 
 
 def make_images(generator: nn.Module, L: torch.Tensor, ab: torch.Tensor):
