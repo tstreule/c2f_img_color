@@ -53,6 +53,7 @@ torch_rng.manual_seed(209384575)
 
 def main():
     # Uncomment when you want hard-coded parse args
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     args = "--dataset-size 32 --num-unet-epochs 1 --num-gan-epochs 1 --pretrained"
     args = parser.parse_args(args.split())
     print("Passed arguments:")
@@ -100,9 +101,9 @@ def main():
 
     # Visualize example batch
     real_imgs = next(iter(val_dl))
-    pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L.to("cpu")))
+    pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L.to(device)).to("cpu"))
     pred_imgs.padding = real_imgs.padding
-    pred_imgs.visualize(other=real_imgs)
+    pred_imgs.visualize(other=real_imgs, save="True")
 
 
 if __name__ == "__main__":
