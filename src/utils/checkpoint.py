@@ -10,9 +10,7 @@ __all__ = ["set_checkpoint_args", "get_checkpoint_path", "save_model", "load_mod
 def set_checkpoint_args(checkpoint=None):
     """
     Returns:
-        A tuple `(make_checkpoints, checkpoint_args)`.
-        make_checkpoints (bool): Whether to make checkpoints
-        checkpoint_args (tuple):
+            checkpoint_args (tuple):
             - (str) checkpoint path
             - (int) checkpoint after each
             - (bool) overwrite checkpoint if already exists
@@ -20,10 +18,9 @@ def set_checkpoint_args(checkpoint=None):
     if isinstance(checkpoint, str):
         checkpoint = (checkpoint, 20, True)
 
-    make_checkpoint = False if checkpoint[0] is None else True
+    path, after_each, overwrite = [fc(cp) for cp, fc in zip(checkpoint, [str, int, bool])]
 
-    checkpoint_args = [fc(cp) for cp, fc in zip(checkpoint, [str, int, bool])]
-    return make_checkpoint, checkpoint_args
+    return path, after_each, overwrite
 
 
 def get_checkpoint_path(name: str) -> str:

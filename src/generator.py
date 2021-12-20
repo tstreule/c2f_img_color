@@ -43,9 +43,9 @@ def pretrain_generator(gen_net: nn.Module, train_dl: DataLoader[LabImageBatch],
                        load_from_checkpoint=False, checkpoint=None):
     """Second pretraining step for generator"""
 
-    checkpoint, (cp_name, cp_after_each, cp_overwrite) = set_checkpoint_args(checkpoint)
+    checkpoint, cp_after_each, cp_overwrite = set_checkpoint_args(checkpoint)
     if checkpoint and load_from_checkpoint:
-        load_model(gen_net, cp_name)
+        load_model(gen_net, checkpoint)
         return
 
     if not optimizer:
@@ -67,10 +67,10 @@ def pretrain_generator(gen_net: nn.Module, train_dl: DataLoader[LabImageBatch],
         print(f"L1 Loss: {loss_meter.mean:.5f} +- {loss_meter.std:.4f}")
 
         if checkpoint and (e+1) % cp_after_each == 0:
-            save_model(gen_net, cp_name + f"_epoch_{e+1:02d}")
+            save_model(gen_net, checkpoint + f"_epoch_{e+1:02d}")
 
     if checkpoint:
-        save_model(gen_net, cp_name + f"_epoch_{epochs:02d}_final")
+        save_model(gen_net, checkpoint + f"_epoch_{epochs:02d}_final")
 
 
 def make_images(generator: nn.Module, L: torch.Tensor, ab: torch.Tensor):
