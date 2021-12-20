@@ -203,7 +203,7 @@ class ImageGAN:
             display_every: Log after `display_every` optimizing steps.
         """
 
-        checkpoint, cp_name, cp_after_each, cp_overwrite = set_checkpoint_vals(checkpoint)
+        checkpoint, (cp_name, cp_after_each, cp_overwrite) = set_checkpoint_args(checkpoint)
 
         for e in range(epochs):
             if self.epoch > e:

@@ -43,7 +43,7 @@ def pretrain_generator(gen_net: nn.Module, train_dl: DataLoader[LabImageBatch],
                        load_from_checkpoint=False, checkpoint=None):
     """Second pretraining step for generator"""
 
-    checkpoint, cp_name, cp_after_each, cp_overwrite = set_checkpoint_vals(checkpoint)
+    checkpoint, (cp_name, cp_after_each, cp_overwrite) = set_checkpoint_args(checkpoint)
     if checkpoint and load_from_checkpoint:
         load_model(gen_net, cp_name)
         return
