@@ -61,15 +61,16 @@ class ColorizationDataset(Dataset):
             return default_collate(batch)
 
 
-def make_dataloader(batch_size=16, n_workers=4, pin_memory=True, **kwargs)\
-        -> DataLoader[LabImageBatch]:
+def make_dataloader(batch_size=16, n_workers=4, pin_memory=True, rng=None,
+                    **kwargs) -> DataLoader[LabImageBatch]:
     dataset = ColorizationDataset(**kwargs)
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=n_workers,
-                            collate_fn=dataset.collate_fn, pin_memory=pin_memory)
+                            collate_fn=dataset.collate_fn, pin_memory=pin_memory,
+                            generator=rng, shuffle=bool(rng))
     return dataloader
 
 
-def get_image_paths(url: str, choose_n=10_000, test=0.2, shuffle=True, seed=1234) \
+def get_image_paths(url: str, choose_n=-1, test=0.2, seed=1234) \
         -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     # Download and untar data
     dataset_path = untar_data(url)
@@ -81,17 +82,17 @@ def get_image_paths(url: str, choose_n=10_000, test=0.2, shuffle=True, seed=1234
     # Create random generator
     np_rng = np.random.default_rng(seed=seed)
 
-    if choose_n:
+    if choose_n > 0:
         paths = np_rng.choice(paths, choose_n, replace=False)
 
     if not test:
         return paths
-    assert (test > 0) and (test < 1), f"Invalid option {test}."
+
+    assert 0 < test < 1, f"Invalid option {test}. Must be a valid percentage."
 
     n = len(paths)
     indices = np.arange(n)
-    if shuffle:
-        np_rng.shuffle(indices)
+    np_rng.shuffle(indices)
     split_idx = int(n * test)
     test_idx = indices[:split_idx]
     train_idx = indices[split_idx:]

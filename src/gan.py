@@ -123,9 +123,9 @@ class ImageGAN:
 
     # === Model updates ===
 
-    def optimize(self, L: torch.Tensor, ab: torch.Tensor):
-        real_imgs = torch.cat([L, ab], dim=1)
-        fake_imgs = torch.cat([L, self.gen_net(L)], dim=1)
+    def optimize(self, batch: LabImageBatch):
+        real_imgs = torch.cat([batch.L, batch.ab], dim=1)
+        fake_imgs = torch.cat([batch.L, self.gen_net(batch.L)], dim=1)
 
         # Update discriminator
         self.dis_net.train()
@@ -213,7 +213,7 @@ class ImageGAN:
             self.reset_loss_meters()  # logging
 
             for i, batch in tqdm(enumerate(train_dl)):
-                self.optimize(batch.L, batch.ab)
+                self.optimize(batch)
 
                 if (i + 1) % display_every == 0:
                     print(f"\nEpoch {e+1}/{epochs}")
