@@ -121,6 +121,8 @@ class ImageGAN:
     # === Model updates ===
 
     def optimize(self, L: torch.Tensor, ab: torch.Tensor):
+        L = L.to(self._device)
+        ab = ab.to(self._device)
         real_imgs = torch.cat([L, ab], dim=1)
         fake_imgs = torch.cat([L, self.gen_net(L)], dim=1)
 
@@ -161,6 +163,10 @@ class ImageGAN:
         self.update_loss_meters(loss_values, count=real_imgs.size(0))
         return gen_loss
 
+
+    def save_model(self):
+        torch.save(self.gen_net.state_dict(), "generator")
+        torch.save(self.dis_net.state_dict(), "dis")
     # === Logging ===
 
     @staticmethod
