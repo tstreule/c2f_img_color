@@ -125,6 +125,7 @@ def main():
     pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L.to(device)).to("cpu"))
     pred_imgs.padding = real_imgs.padding
     pred_imgs.visualize(other=real_imgs, save=True)
+    pred_imgs[0].visualize(real_imgs[0], save=True)
 
 
 if __name__ == "__main__":

@@ -227,7 +227,7 @@ class ImageGAN:
                     # Visualize generated images
                     self.gen_net.eval()
                     pred_imgs = LabImageBatch(L=batch.L, ab=self.gen_net(batch.L))
-                    pred_imgs.visualize(other=batch, save=True)
+                    pred_imgs.visualize(other=batch, show=False, save=True)
                     self.gen_net.train()
 
             if checkpoint and (e + 1) % cp_after_each == 0:
