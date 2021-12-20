@@ -11,7 +11,7 @@ from .utils.image import LabImageBatch
 from .utils.utils import WelfordMeter
 from .utils.checkpoint import *
 
-
+import torchvision.transforms as T
 __all__ = ["GANLoss", "ImageGAN"]
 
 
@@ -74,7 +74,7 @@ class ImageGAN:
 
     def __init__(self, gen_net: nn.Module = None, dis_net: nn.Module = None,
                  gen_opt_params: dict = None, dis_opt_params: dict = None,
-                 gen_lambda_mae=100.0, device: torch.device = None):
+                 gen_lambda_mae=10.0, device: torch.device = None):
         """
         Train agent for Image GAN.
 
@@ -223,7 +223,7 @@ class ImageGAN:
                     self.log_results()
                     # Visualize generated images
                     self.gen_net.eval()
-                    pred_imgs = LabImageBatch(L=batch.L, ab=self.gen_net(batch.L))
+                    pred_imgs = LabImageBatch(L=batch.L, ab=self.gen_net(batch.L.to(self._device)).to("cpu"))
                     pred_imgs.visualize(other=batch, save=True)
                     self.gen_net.train()
 
@@ -268,3 +268,129 @@ class ImageGAN:
                 loss_meters="loss_meters",
             )
         }
+
+
+class ImageGANwFeedback(ImageGAN):
+    def __int__(self, gen_net: nn.Module = None, dis_net: nn.Module = None,
+                 gen_opt_params: dict = None, dis_opt_params: dict = None,
+                 gen_lambda_mae=100.0, device: torch.device = None):
+        super().__init__()
+
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu") \
+            if device is None else torch.device(device)
+        self._lambda_mae = gen_lambda_mae
+
+        # Create generator and discriminator
+        self.gen_net = init_model(build_res_u_net(3, 2), self._device) \
+            if gen_net is None else gen_net.to(self._device)
+        self.dis_net: PatchDiscriminator
+        self.dis_net = init_model(PatchDiscriminator(3, 64, 3), self._device) \
+            if dis_net is None else dis_net.to(self._device)
+
+        # Define optimizer
+        def opt_params(params: dict):
+            if params is None:
+                # Return default parameters as proposed by
+                # https://arxiv.org/abs/1611.07004 section 3.3
+                return dict(lr=2e-4, betas=(0.5, 0.999))
+            else:
+                return params
+        self._gen_opt = optim.Adam(self.gen_net.parameters(), **opt_params(gen_opt_params))
+        self._dis_opt = optim.Adam(self.dis_net.parameters(), **opt_params(dis_opt_params))
+
+        # Define criteria
+        self._gan_crit = GANLoss(gan_mode="vanilla").to(self._device)
+        self._mae_crit = nn.L1Loss()
+
+    def optimize(self, batch: LabImageBatch):
+        sizes = [64,128,256]
+        prev_pred_imgs = torch.zeros([batch.batch_size,2,64,64]).to(self._device)
+        for size in sizes:
+            self.optimize_one_step(batch, size, prev_pred_imgs)
+
+    def optimize_one_step(self,batch, size, prev_pred_imgs):
+        transforms = [
+            # Uncomment for significant speed up
+            T.Resize((size, size), T.InterpolationMode.BICUBIC),  # ATTENTION: This skews/distorts the images!
+        ]
+
+        transforms = T.Compose([*transforms])
+
+        L = transforms(batch.L.to(self._device))
+        ab = transforms(batch.ab.to(self._device))
+
+        iter_input = torch.cat([L, transforms(prev_pred_imgs)], dim=1)
+
+        prev_pred_imgs = self.gen_net(iter_input)
+        real_imgs = torch.cat([L, ab], dim=1)
+        fake_imgs = torch.cat([L, prev_pred_imgs], dim=1)
+
+        # Update discriminator
+        self.dis_net.train()
+        set_requires_grad(self.dis_net, True)
+        self._dis_opt.zero_grad()
+        self._dis_loss(real_imgs, fake_imgs).backward()
+        self._dis_opt.step()
+
+        # Update generator
+        self.gen_net.train()
+        set_requires_grad(self.dis_net, False)
+        self._gen_opt.zero_grad()
+        self._gen_loss(real_imgs, fake_imgs).backward()
+        self._gen_opt.step()
+
+    def colorize_images(self, L, sizes = [64, 128,256]):
+        self.gen_net.eval()
+        prev_pred_imgs = torch.zeros([L.shape[0], 2, 64, 64]).to(self._device)
+        for size in sizes:
+            transforms = [
+                # Uncomment for significant speed up
+                T.Resize((size, size), T.InterpolationMode.BICUBIC),  # ATTENTION: This skews/distorts the images!
+            ]
+
+            transforms = T.Compose([*transforms])
+            iter_input = torch.cat([transforms(L).to(self._device), transforms(prev_pred_imgs)], dim=1)
+
+            prev_pred_imgs = self.gen_net(iter_input)
+
+        return LabImageBatch(L=transforms(L).to("cpu"), ab=prev_pred_imgs.to("cpu"))
+
+
+    def train(self, train_dl: DataLoader[LabImageBatch], epochs=20, display_every=100,
+              checkpoint=None):
+        """
+        Main training loop.
+
+        Args:
+            train_dl: Image data loader.
+            epochs: Number of epochs for training.
+            display_every: Log after `display_every` optimizing steps.
+        """
+
+        checkpoint, cp_after_each, cp_overwrite = set_checkpoint_args(checkpoint)
+
+        for e in range(epochs):
+            if self.epoch > e:
+                continue
+            self.epoch = e
+
+            self.reset_loss_meters()  # logging
+
+            for i, batch in tqdm(enumerate(train_dl)):
+                self.optimize(batch)
+
+                if (i + 1) % display_every == 0:
+                    print(f"\nEpoch {e+1}/{epochs}")
+                    print(f"Iteration {i}/{len(train_dl)}")
+                    self.log_results()
+                    # Visualize generated images
+                    self.gen_net.eval()
+                    pred_imgs = self.colorize_images(batch.L, sizes = [64,128,256])
+                    pred_imgs.visualize(other=batch, save=True)
+                    self.gen_net.train()
+
+            if checkpoint and (e + 1) % cp_after_each == 0:
+                self.save_model(checkpoint + f"_epoch_{e+1:02d}", cp_overwrite)
+
+        if checkpoint:
+            self.save_model(checkpoint + f"_epoch_{epochs:02d}_final", cp_overwrite)

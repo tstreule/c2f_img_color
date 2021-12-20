@@ -156,6 +156,9 @@ class LabImageBatch:
             image = LabImage(lab=T_functional_crop(image.lab, 0, 0, height, width))
         return image
 
+
+
+
     @property
     def lab(self):
         labs = [img.lab for img in self.batch]  # collate
