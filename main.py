@@ -15,6 +15,7 @@ torch.manual_seed(923845902387)
 
 
 def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Create dataset and dataloaders
     train_paths, test_paths = get_image_paths(URLs.COCO_SAMPLE, 40, test=0.2)
     train_dl = make_dataloader(16, paths=train_paths, split="train")
@@ -50,8 +51,8 @@ def main():
 
     # Visualize example batch
     real_imgs = next(iter(val_dl))
-    pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L))
-    pred_imgs.visualize(other=real_imgs)
+    pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L.to(device)).to("cpu"))
+    pred_imgs.visualize(other=real_imgs, save="True")
 
     # # ---------------------------
     # # Playground
@@ -65,7 +66,6 @@ def main():
     # # Visualize
     # batch[0].visualize()
     # batch.visualize(draw_n=5)
-
 
 if __name__ == "__main__":
     main()
