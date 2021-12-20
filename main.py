@@ -7,6 +7,7 @@ from src.gan import ImageGAN
 from src.generator import *
 from src.utils.image import *
 from src.utils.dataset import *
+from src.utils.checkpoint import set_checkpoint_args
 
 import argparse
 
@@ -23,7 +24,9 @@ parser.add_argument("--batch-size", type=int, default=16,
                     help="batch size of data loaders")
 parser.add_argument("--num-workers", type=int, default=4,
                     help="number of workers for data loaders")
-# Training
+# Training parameters
+parser.add_argument("--unet-size", type=int, default=128,
+                    help="size of U-Net")
 parser.add_argument("--num-unet-epochs", type=int, default=20,
                     help="number of training epochs for U-Net")
 parser.add_argument("--num-gan-epochs", type=int, default=20,
@@ -49,30 +52,44 @@ torch_rng.manual_seed(209384575)
 
 
 def main():
+    # Uncomment when you want hard-coded parse args
+    args = "--dataset-size 32 --num-unet-epochs 1 --num-gan-epochs 1 --pretrained"
+    args = parser.parse_args(args.split())
+    print("Passed arguments:")
+    print(", ".join([f"{arg}={getattr(args, arg)}" for arg in vars(args)]), "\n")
+
     # Create dataset and dataloaders
+    print("Getting dataset")
     train_paths, test_paths = get_image_paths(args.dataset, args.dataset_size, test=args.test_split)
     train_dl = make_dataloader(args.batch_size, args.num_workers,
                                paths=train_paths, split="train", rng=torch_rng)
     val_dl = make_dataloader(args.batch_size, args.num_workers,
                              paths=test_paths, split="test")
+    print("Done\n")
 
     # ---------------------------
     # Training
 
     if not args.from_pretrained:
         # Pre-train generator
-        generator = build_res_u_net(n_input=1, n_output=2, size=256)
+        print("Pretraining generator")
+        generator = build_res_u_net(n_input=1, n_output=2, size=args.unet_size)
         pretrain_generator(generator, train_dl, epochs=args.num_unet_epochs,
                            load_from_checkpoint=False, checkpoint=args.unet_checkpoint)
+        print("Done\n")
 
         # Train with GAN training agent
+        print("Training GAN")
         agent = ImageGAN(gen_net=generator)
         agent.train(train_dl, epochs=args.num_gan_epochs, checkpoint=args.gan_checkpoint)
+        print("Done\n")
 
     else:
         # Load from checkpoint
+        print("Load GAN from checkpoint")
         agent = ImageGAN()
         agent.load_model(args.gan_checkpoint+"_epoch_01_final.pt")
+        print("Done\n")
 
     # ---------------------------
     # Evaluation
@@ -83,16 +100,10 @@ def main():
 
     # Visualize example batch
     real_imgs = next(iter(val_dl))
-    pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L))
+    pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L.to("cpu")))
     pred_imgs.padding = real_imgs.padding
     pred_imgs.visualize(other=real_imgs)
 
 
 if __name__ == "__main__":
-    # Uncomment when you want hard-coded parse args
-    # args = "--dataset-size 32 --num-unet-epochs 1 --num-gan-epochs 1 --pretrained"
-    # args = parser.parse_args(args.split())
-    print("Passed arguments:")
-    print(", ".join([f"{arg}={getattr(args, arg)}" for arg in vars(args)]), "\n")
-
     main()

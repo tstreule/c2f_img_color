@@ -124,8 +124,10 @@ class ImageGAN:
     # === Model updates ===
 
     def optimize(self, batch: LabImageBatch):
-        real_imgs = torch.cat([batch.L, batch.ab], dim=1)
-        fake_imgs = torch.cat([batch.L, self.gen_net(batch.L)], dim=1)
+        L = batch.L.to(self._device)
+        ab = batch.ab.to(self._device)
+        real_imgs = torch.cat([L, ab], dim=1)
+        fake_imgs = torch.cat([L, self.gen_net(L)], dim=1)
 
         # Update discriminator
         self.dis_net.train()

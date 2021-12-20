@@ -28,7 +28,8 @@ class ColorizationDataset(Dataset):
         assert split in ("train", "test", "val"), f"Invalid option '{split}'"
 
         transforms = [
-            T.Resize((256, 256), T.InterpolationMode.BICUBIC)  # Uncomment for significant speed up
+            # Uncomment for significant speed up
+            T.Resize((256, 256), T.InterpolationMode.BICUBIC),  # ATTENTION: This skews/distorts the images!
         ]
         if split == "train":
             transforms.extend([

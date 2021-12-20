@@ -152,7 +152,7 @@ class LabImageBatch:
     def __getitem__(self, item) -> LabImage:
         image = self.batch[item]
         if self.padding:
-            height, width = np.array(image.lab.shape[1:]) - self.padding[item][2:]
+            width, height = np.array(image.lab.shape[1:]) - self.padding[item][2:]
             image = LabImage(lab=T_functional_crop(image.lab, 0, 0, height, width))
         return image
 
