@@ -11,6 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from .image import *
 
+
 __all__ = ["URLs", "ColorizationDataset", "make_dataloader", "get_image_paths"]
 
 
@@ -46,7 +47,7 @@ class ColorizationDataset(Dataset):
     def __getitem__(self, item):
         img = Image.open(self.paths[item]).convert("RGB")
         img = self.transforms(img)
-        return LabImage(rgb=img)
+        return LabImage(rgb_=img)
 
     def __len__(self):
         return len(self.paths)

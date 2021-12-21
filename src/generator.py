@@ -51,14 +51,15 @@ def pretrain_generator(gen_net: nn.Module, train_dl: DataLoader[LabImageBatch],
 
     for e in range(epochs):
         loss_meter = WelfordMeter()
-        for data in tqdm(train_dl):
-            preds = gen_net(data.L.to(device))
-            loss = criterion(preds, data.ab.to(device))
+        for batch in tqdm(train_dl):
+            preds = gen_net(batch.L.to(device))
+            preds.masked_fill_(batch.pad_mask, batch.pad_fill_value)  # enforce zero loss at padded values
+            loss = criterion(preds, batch.ab.to(device))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            loss_meter.update(loss.item(), data.batch_size)
+            loss_meter.update(loss.item(), len(batch))
 
         print(f"Epoch {e + 1}/{epochs}")
         print(f"L1 Loss: {loss_meter.mean:.5f} +- {loss_meter.std:.4f}")

@@ -101,7 +101,7 @@ def main():
         print("Training GAN...")
         agent = ImageGAN(gen_net=generator)
         gan_cps = (args.cp_dir + "gan_final", 10, args.cp_overwrite)
-        agent.train(train_dl, epochs=args.gan_num_epochs, checkpoints=gan_cps)
+        agent.train(train_dl, val_dl, epochs=args.gan_num_epochs, checkpoints=gan_cps)
         gan_save = secure_cp_path(args.cp_dir + "gan_final")
         agent.save_model(gan_save, overwrite=args.cp_overwrite)
 
@@ -122,8 +122,8 @@ def main():
 
     # Visualize example batch
     real_imgs = next(iter(val_dl))
-    pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L.to(device)).to("cpu"))
-    pred_imgs.padding = real_imgs.padding
+    pred_imgs = LabImageBatch(L=real_imgs.L, ab=generator(real_imgs.L.to(device)).to("cpu"),
+                              pad_mask=real_imgs.pad_mask)
     pred_imgs.visualize(other=real_imgs, save=True)
     pred_imgs[0].visualize(real_imgs[0], save=True)
 

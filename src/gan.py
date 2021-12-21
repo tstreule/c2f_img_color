@@ -128,9 +128,7 @@ class ImageGAN:
         ab = batch.ab.to(self._device)
         real_imgs = torch.cat([L, ab], dim=1)
         fake_imgs = torch.cat([L, self.gen_net(L)], dim=1)
-        # Overwrite padding of fake_imgs with real_imgs
-        mask = batch.get_padding_mask()
-        fake_imgs[mask] = -1
+        fake_imgs.masked_fill_(batch.pad_mask, batch.pad_fill_value)  # enforce zero loss at padded values
 
         # Update discriminator
         self.dis_net.train()
@@ -197,13 +195,14 @@ class ImageGAN:
 
     # === Main training loop ===
 
-    def train(self, train_dl: DataLoader[LabImageBatch], epochs=20, display_every=100,
-              checkpoints=None):
+    def train(self, train_dl: DataLoader[LabImageBatch], val_dl: DataLoader[LabImageBatch],
+              epochs=20, display_every=100, checkpoints=None):
         """
         Main training loop.
 
         Args:
-            train_dl: Image data loader.
+            train_dl: Image data loader for training.
+            val_dl: Image data loader for validation.
             epochs: Number of epochs for training.
             display_every: Log after `display_every` optimizing steps.
         """
@@ -226,8 +225,10 @@ class ImageGAN:
                     self.log_results()
                     # Visualize generated images
                     self.gen_net.eval()
-                    pred_imgs = LabImageBatch(L=batch.L, ab=self.gen_net(batch.L))
-                    pred_imgs.visualize(other=batch, show=False, save=True)
+                    val_batch = next(iter(val_dl))
+                    pred_imgs = LabImageBatch(L=val_batch.L, ab=self.gen_net(val_batch.L.to(self._device)).to("cpu"),
+                                              pad_mask=val_batch.pad_mask)
+                    pred_imgs.visualize(other=val_batch, show=False, save=True)
                     self.gen_net.train()
 
             if checkpoint and (e + 1) % cp_after_each == 0:
