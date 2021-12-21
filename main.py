@@ -62,8 +62,8 @@ def main():
     # Uncomment when you want hard-coded parse args
     hard_args = "--dataset-size 32 --unet-num-epochs 1 --gan-num-epochs 1 "
     hard_args += "--cp-dir checkpoints/base/ "
-    hard_args += "--unet-cp unet_final.pt "
-    hard_args += "--gan-cp gan_final.pt "
+   # hard_args += "--unet-cp unet_final.pt "
+    #hard_args += "--gan-cp gan_final.pt "
     args = parser.parse_args(hard_args.split())
 
     print_args = [f"{a}={getattr(args, a)}" for a in vars(args)]
