@@ -363,8 +363,11 @@ class ImageGANwFeedback(ImageGAN):
                     self.log_results()
                     # Visualize generated images
                     self.gen_net.eval()
-                    self.evaluate_model(val_dl)
-                    pred_imgs = self.colorize_images(batch.L, sizes=[64, 128])
+                    real_imgs = next(iter(val_dl))
+                    pred_imgs = self.colorize_images(real_imgs.L, sizes=[64, 128,256])
+                    pred_imgs.visualize(other=real_imgs, show=False, save=True)
+
+                    pred_imgs = self.colorize_images(batch.L, sizes=[64, 128,256])
                     pred_imgs.visualize(other=batch, show=False, save=True)
                     self.gen_net.train()
 
