@@ -3,7 +3,7 @@
 import numpy as np
 import torch
 
-from src.agent import ImageGANAgent
+from src.agent import ImageGANAgent,ImageGANAgentwFeedback
 from src.utils.data import URLs, get_image_paths, make_dataloader
 from src.utils.image import *
 
@@ -54,10 +54,10 @@ def main():
     # Argument Parser
 
     # Uncomment when you want hard-coded parse args
-    hard_args = "--dataset-size 32 --pre-num-epochs 20 --gan-num-epochs 20 "
+    hard_args = "--dataset-size 32 --pre-num-epochs 1 --gan-num-epochs 1 --batch-size 2 "
     hard_args += "--cp-dir checkpoints/base/ "
-    hard_args += "--pre-cp pre_final.pt "
-    hard_args += "--gan-cp gan_final.pt "
+    #hard_args += "--pre-cp pre_final.pt "
+    #hard_args += "--gan-cp gan_final.pt "
     args = parser.parse_args(hard_args.split())
 
     print_args = [f"{a}={getattr(args, a)}" for a in vars(args)]
@@ -122,8 +122,7 @@ def main():
 
     # Visualize example batch
     real_imgs = next(iter(val_dl))
-    pred_imgs = LabImageBatch(L=real_imgs.L, ab=agent(real_imgs.L), pad_mask=real_imgs.pad_mask)
-    pred_imgs.visualize(other=real_imgs, show=False, save=True)
+    agent.visualize_example_batch(real_imgs)
     # pred_imgs[0].visualize(real_imgs[0], show=False, save=True)
 
     print(" ...done")
