@@ -14,6 +14,7 @@ from .utils.utils import *
 
 import torchvision.transforms as T
 
+
 # === Loss Meters ===
 
 LossMeterDict = dict[str, WelfordMeter]
@@ -129,29 +130,6 @@ class ImageGANAgent:
                                              fname=f"{mode}_epoch_{last_epoch}_{time.time()}.png")
 
         return self
-    def run_epoch(self, optimize, loss_meters, train_dl):
-        for i, batch in tqdm(enumerate(train_dl)):
-            # Get real and predict (fake) image batch
-            L = batch.L.to(self._device)
-            ab = batch.ab.to(self._device)
-            real_imgs = torch.cat([L, ab], dim=1)
-            fake_imgs = torch.cat([L, self.gen_net(L)], dim=1)
-            # enforce zero loss at padded values
-            fake_imgs.masked_fill_(batch.pad_mask.to(self._device), batch.pad_fill_value)
-
-            # Optimize
-            loss_dict = optimize(real_imgs, fake_imgs)
-            update_loss_meters(loss_meters, loss_dict, len(batch))
-
-    def evaluate(self, val_dl, mode, last_epoch):
-        self.gen_net.eval()
-        val_batch = next(iter(val_dl))
-        val_pred_ab = self.gen_net(val_batch.L.to(self._device)).to("cpu")
-        pred_imgs = LabImageBatch(L=val_batch.L, ab=val_pred_ab, pad_mask=val_batch.pad_mask)
-        pred_imgs.visualize(other=val_batch, show=False, save=True,
-                            fname=f"{mode}_epoch_{last_epoch}_{time.time()}.png")
-        self.gen_net.train()
-
 
     def _run_epoch(self, optimize, loss_meters, train_dl):
         for i, batch in tqdm(enumerate(train_dl)):
@@ -275,6 +253,7 @@ class ImageGANAgent:
         for name, attr_name in save_dict["other"].items():
             setattr(self, attr_name, checkpoint["other"][name])
         return self
+
 
 class C2FImageGANAgent(ImageGANAgent):
 
