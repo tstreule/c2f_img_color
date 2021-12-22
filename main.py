@@ -116,9 +116,10 @@ def main():
     print("\n=====================")
     print("Evaluation...")
 
-    # Retrieve trained generator
-    generator = agent.gen_net
-    generator.eval()
+    # # Retrieve trained generator
+    # # -> you can directly call `agent(batch.L)`
+    # generator = agent.gen_net
+    # generator.eval()
 
     # Visualize example batch
     real_imgs = next(iter(val_dl))

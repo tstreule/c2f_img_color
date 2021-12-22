@@ -134,4 +134,3 @@ class WelfordMeter:
         if self.counter == 1:
             return 0.0
         return np.sqrt(self._S / self.counter)
-

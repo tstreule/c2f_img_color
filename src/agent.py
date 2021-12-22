@@ -13,6 +13,8 @@ from .utils.image import LabImageBatch
 from .utils.utils import *
 
 import torchvision.transforms as T
+
+
 # === Loss Meters ===
 
 LossMeterDict = dict[str, WelfordMeter]
@@ -108,7 +110,7 @@ class ImageGANAgent:
                 continue
 
             reset_loss_meters(loss_meters)
-            self.run_epoch(optimize, loss_meters, train_dl)
+            self._run_epoch(optimize, loss_meters, train_dl)
 
             # Make checkpoint
             last_epoch = curr_epoch + 1  # note that it's not linked to `self` since it's a primitive data type
@@ -123,32 +125,23 @@ class ImageGANAgent:
                 print(f"Epoch {last_epoch}/{n_epochs}")
                 log_results(loss_meters)
                 # Visualize generated images
-                self.evaluate(val_dl, mode, last_epoch)
+                val_batch = next(iter(val_dl))
+                self.visualize_example_batch(val_batch, show=False, save=True,
+                                             fname=f"{mode}_epoch_{last_epoch}_{time.time()}.png")
 
         return self
-    def run_epoch(self, optimize, loss_meters, train_dl):
+
+    def _run_epoch(self, optimize, loss_meters, train_dl):
         for i, batch in tqdm(enumerate(train_dl)):
             # Get real and predict (fake) image batch
-            L = batch.L.to(self._device)
-            ab = batch.ab.to(self._device)
-            real_imgs = torch.cat([L, ab], dim=1)
-            fake_imgs = torch.cat([L, self.gen_net(L)], dim=1)
+            real_imgs = batch.lab.to(self._device)
+            fake_imgs = self(real_imgs[:, :1])  # equivalent to batch.L but faster
             # enforce zero loss at padded values
             fake_imgs.masked_fill_(batch.pad_mask.to(self._device), batch.pad_fill_value)
 
             # Optimize
             loss_dict = optimize(real_imgs, fake_imgs)
             update_loss_meters(loss_meters, loss_dict, len(batch))
-
-    def evaluate(self, val_dl, mode, last_epoch):
-        self.gen_net.eval()
-        val_batch = next(iter(val_dl))
-        val_pred_ab = self.gen_net(val_batch.L.to(self._device)).to("cpu")
-        pred_imgs = LabImageBatch(L=val_batch.L, ab=val_pred_ab, pad_mask=val_batch.pad_mask)
-        pred_imgs.visualize(other=val_batch, show=False, save=True,
-                            fname=f"{mode}_epoch_{last_epoch}_{time.time()}.png")
-        self.gen_net.train()
-
 
     def _pre_optimize(self, real_imgs: torch.Tensor, fake_imgs: torch.Tensor) -> dict:
         self.gen_net.train()
@@ -204,15 +197,22 @@ class ImageGANAgent:
         loss_dict = dict(gen_loss_gan=gan_loss, gen_loss_mae=mae_loss, gen_loss=gen_loss)
         return gen_loss, loss_dict
 
-    def visualize_example_batch(self, real_imgs):
-        pred_imgs = LabImageBatch(L=real_imgs.L, ab=self(real_imgs.L), pad_mask=real_imgs.pad_mask)
-        pred_imgs.visualize(other=real_imgs, show=False, save=True)
+    # === Generate ===
+
+    def __call__(self, L: torch.Tensor) -> torch.Tensor:
+        L = L.to(self._device)
+        pred_imgs = torch.cat([L, self.gen_net(L)], dim=1)
+        return pred_imgs
 
     # === Evaluation ===
 
-    def __call__(self, L: torch.Tensor):
-        ab = self.gen_net(L.to(self._device)).to("cpu")
-        return ab
+    def visualize_example_batch(self, real_imgs: LabImageBatch, **kwargs):
+        prev_train_mode = self.gen_net.training
+        self.gen_net.eval()
+        pred_lab = self(real_imgs.L).to("cpu")
+        pred_imgs = LabImageBatch(lab=pred_lab, pad_mask=real_imgs.pad_mask)
+        pred_imgs.visualize(other=real_imgs, **kwargs)
+        self.gen_net.train(prev_train_mode)
 
     # === Save and load model ===
 
