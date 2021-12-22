@@ -60,7 +60,7 @@ def main():
     # Argument Parser
 
     # Uncomment when you want hard-coded parse args
-    hard_args = "--dataset-size 4096 --unet-num-epochs 0 --gan-num-epochs 20 --batch-size 16 "
+    hard_args = "--dataset-size 4096 --unet-num-epochs 0 --gan-num-epochs 20 --batch-size 8 "
     hard_args += "--cp-dir checkpoints/base/ "
    # hard_args += "--unet-cp unet_final.pt "
     hard_args += "--gan-cp gan_epoch_20.pt"

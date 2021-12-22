@@ -280,9 +280,9 @@ class ImageGANwFeedback(ImageGAN):
 
 
     def optimize(self, batch: LabImageBatch, sizes = [64,128]):
-        prev_pred_imgs = torch.zeros([batch.batch_size,2,64,64]).to(self._device)
+        prev_pred_imgs = torch.zeros([batch.batch_size,2,sizes[0],sizes[0]]).to(self._device)
         for size in sizes:
-            self.optimize_one_step(batch, size, prev_pred_imgs)
+            prev_pred_imgs = self.optimize_one_step(batch, size, prev_pred_imgs)
 
     def optimize_one_step(self,batch: LabImageBatch, size: list[int], prev_pred_imgs):
         transforms = [
@@ -292,8 +292,8 @@ class ImageGANwFeedback(ImageGAN):
 
         transforms = T.Compose([*transforms])
 
-        L = transforms(batch.L.to(self._device))
-        ab = transforms(batch.ab.to(self._device))
+        L = transforms(batch.L).to(self._device)
+        ab = transforms(batch.ab).to(self._device)
 
         iter_input = torch.cat([L, transforms(prev_pred_imgs)], dim=1)
 
@@ -314,6 +314,7 @@ class ImageGANwFeedback(ImageGAN):
         self._gen_opt.zero_grad()
         self._gen_loss(real_imgs, fake_imgs).backward()
         self._gen_opt.step()
+        return prev_pred_imgs.detach()
 
     def colorize_images(self, L, sizes: list[int] = [64, 128]):
         self.gen_net.eval()
