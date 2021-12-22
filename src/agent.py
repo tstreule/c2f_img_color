@@ -254,108 +254,65 @@ class ImageGANAgent:
             setattr(self, attr_name, checkpoint["other"][name])
         return self
 
-class ImageGANAgentwFeedback(ImageGANAgent):
-    def __init__(self, gen_net = None, *args, **kwargs):
-        if gen_net is None:
-            gen_net = build_res_u_net(3, 2)
-        super().__init__(gen_net = gen_net, *args, **kwargs)
 
-    def train(self, train_dl: LabImageDataLoader, val_dl: LabImageDataLoader,
-              n_epochs=20, display_every=5, mode="gan", checkpoints=None, sizes = [64,128]):
+class C2FImageGANAgent(ImageGANAgent):
 
-        # Choose optimization strategy
-        assert mode in ("pre", "gan")
-        optimize = getattr(self, f"_{mode}_optimize")
-        loss_meters = getattr(self, f"_{mode}_loss_meters")
-        last_epoch = getattr(self, f"_{mode}_epoch")
+    def __init__(self, *args, gen_net_params=(3, 2, 128), shrink_size=2.0, **kwargs):
+        super().__init__(*args, gen_net_params=gen_net_params,  **kwargs)
+        # Define shrink size parameter (larger values speed up training and prediction)
+        self.shrink_size = shrink_size
 
-        # Set checkpointing arguments
-        checkpoint, cp_after_each, cp_overwrite = set_cp_args(checkpoints)
+    # === Training ===
 
-        # --- Main training loop ---
-        for curr_epoch in range(n_epochs):
-            # Skip previous epochs when loaded from checkpoint
-            if last_epoch > curr_epoch:
-                continue
-
-            reset_loss_meters(loss_meters)
-            self.run_epoch(optimize, loss_meters, train_dl, sizes)
-
-            # Make checkpoint
-            last_epoch = curr_epoch + 1  # note that it's not linked to `self` since it's a primitive data type
-            setattr(self, f"_{mode}_epoch", last_epoch)
-            if checkpoint and last_epoch % cp_after_each == 0:
-                cp_save_as = checkpoint + f"_epoch_{last_epoch:02d}"
-                self.save_model(cp_save_as, cp_overwrite)
-
-            # Give an update to performance
-            if last_epoch % display_every == 0:
-                # Print status
-                print(f"Epoch {last_epoch}/{n_epochs}")
-                log_results(loss_meters)
-                # Visualize generated images
-                self.evaluate(val_dl, mode, last_epoch, sizes)
-
-        return self
-
-    def run_epoch(self, optimize, loss_meters, train_dl, sizes):
+    def _run_epoch(self, optimize, loss_meters, train_dl):
         for i, batch in tqdm(enumerate(train_dl)):
+            # Get real images
+            real_imgs = batch.lab.to(self._device)
+            pred_imgs = self._c2f_recursive(real_imgs, opt=(optimize, loss_meters, batch))
+            # enforce zero loss at padded values
+            pred_imgs.masked_fill_(batch.pad_mask.to(self._device), batch.pad_fill_value)
+            # Optimize
+            loss_dict = optimize(real_imgs, pred_imgs)
+            update_loss_meters(loss_meters, loss_dict, len(batch))
 
-            prev_pred_imgs = torch.zeros([batch.L.shape[0], 2, sizes[0], sizes[0]]).to(self._device)
-            for size in sizes:
-                prev_pred_imgs, real_imgs, fake_imgs = self.one_iteration(batch, size, prev_pred_imgs)
-                loss_dict = optimize(real_imgs, fake_imgs)
-                update_loss_meters(loss_meters, loss_dict, len(batch))
+    def _c2f_recursive(self, real_imgs: torch.Tensor, min_size=64, opt=None) -> torch.Tensor:
+        real_sizes = real_imgs.shape[2:]
+        smaller_sizes = [int(size / self.shrink_size) for size in real_sizes]
 
-    def one_iteration(self, batch, size, prev_pred_imgs):
-        transforms = [
-            # Uncomment for significant speed up
-            T.Resize((size, size), T.InterpolationMode.BICUBIC),  # ATTENTION: This skews/distorts the images!
-        ]
+        if not any(size < min_size for size in smaller_sizes):
+            resize = T.Resize(tuple(smaller_sizes))
+            prev_pred_imgs = self._c2f_recursive(resize(real_imgs), min_size, opt)
+        else:
+            # Initialize dummy predictions
+            # when not training `real_imgs` can also be just a "L"
+            prev_pred_imgs = torch.zeros(real_imgs.shape[0], 3, *real_imgs.shape[2:])
 
-        transforms = T.Compose([*transforms])
+        # Resizer for scaling up or down
+        resize = T.Resize(tuple(real_sizes))
 
-        L = transforms(batch.L).to(self._device)
-        ab = transforms(batch.ab).to(self._device)
-        iter_input = torch.cat([L, transforms(prev_pred_imgs)], dim=1)
+        # Prediction
+        L = real_imgs[:, :1].to(self._device)
+        ab = resize(prev_pred_imgs[:, 1:]).to(self._device)
+        pred_input = torch.cat([L, ab], dim=1)
+        pred_ab = self.gen_net(pred_input)
+        pred_imgs = torch.cat([L, pred_ab], dim=1)
 
-        prev_pred_imgs = self.gen_net(iter_input)
-        real_imgs = torch.cat([L, ab], dim=1)
-        fake_imgs = torch.cat([L, prev_pred_imgs], dim=1)
+        # TODO: Debug - why can't we do that...?
+        # # Optimize
+        # if opt is not None:
+        #     optimize, loss_meters, batch = opt
+        #     # enforce zero loss at padded values
+        #     pred_imgs.masked_fill_(resize(batch.pad_mask).to(self._device), batch.pad_fill_value)
+        #     # Optimize
+        #     loss_dict = optimize(real_imgs, pred_imgs)
+        #     update_loss_meters(loss_meters, loss_dict, len(batch))
+        #     print("Successful 'til here")
 
-        fake_imgs.masked_fill_(transforms(batch.pad_mask).to(self._device), batch.pad_fill_value)
-        return prev_pred_imgs.detach(), real_imgs, fake_imgs
+        return pred_imgs
 
-    def evaluate(self, val_dl, mode, last_epoch, sizes):
-        self.gen_net.eval()
-        val_batch = next(iter(val_dl))
-        pred_imgs = self.colorize_images(val_batch, sizes)
-        pred_imgs.visualize(other=val_batch, show=False, save=True,
-                            fname=f"{mode}_epoch_{last_epoch}_{time.time()}.png")
-        self.gen_net.train()
+    # === Generate ===
 
-
-    def colorize_images(self, batch, sizes: list[int] = [64, 128]):
-        self.gen_net.eval()
-        L = batch.L
-        prev_pred_imgs = torch.zeros([L.shape[0], 2, 64, 64]).to(self._device)
-        for size in sizes:
-            transforms = [
-                # Uncomment for significant speed up
-                T.Resize((size, size), T.InterpolationMode.BICUBIC),  # ATTENTION: This skews/distorts the images!
-            ]
-
-            transforms = T.Compose([*transforms])
-            iter_input = torch.cat([transforms(L).to(self._device), transforms(prev_pred_imgs)], dim=1)
-
-            prev_pred_imgs = self.gen_net(iter_input)
-
-        return LabImageBatch(L=transforms(L).to("cpu"), ab=prev_pred_imgs.to("cpu"), pad_mask=transforms(batch.pad_mask))
-
-    def colorize_image(self, L, sizes: list[int] = [64, 128]):
-        L =torch.unsqueeze(L, 0)
-        return self.colorize_images(L, sizes).batch[0]
-
-    def visualize_example_batch(self, real_imgs, sizes = [64,128]):
-        pred_imgs = self.colorize_images(real_imgs, sizes)
-        pred_imgs.visualize(other=real_imgs, show=False, save=True)
+    def __call__(self, L: torch.Tensor) -> torch.Tensor:
+        L = L.to(self._device)
+        pred_imgs = self._c2f_recursive(L)
+        return pred_imgs
