@@ -3,7 +3,8 @@ import warnings
 from pathlib import Path
 from typing import Union
 
-from PIL.Image import Image
+from PIL import Image
+
 import matplotlib.pyplot as plt
 from skimage.color import rgb2lab, lab2rgb
 
@@ -15,7 +16,7 @@ __all__ = ["LabImage", "LabImageBatch"]
 
 
 _IMG_SIZE = 2  # for plt
-Array = Union[list, np.ndarray, torch.Tensor, Image]
+Array = Union[list, np.ndarray, torch.Tensor, Image.Image]
 
 
 class LabImage:
@@ -84,6 +85,10 @@ class LabImage:
             lab = np.array(lab)
         self._store_lab(lab)
         return self
+
+    def save(self,fname):
+        Image.fromarray(np.asarray((self.rgb_ * 255)).astype(np.uint8)).save(fname)
+
 
     # === Data Getter ===
 

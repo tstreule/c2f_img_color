@@ -9,7 +9,7 @@ from torch import nn, optim
 from .discriminator import PatchDiscriminator
 from .generator import build_res_u_net
 from .utils.data import LabImageDataLoader
-from .utils.image import LabImageBatch
+from .utils.image import LabImageBatch, LabImage
 from .utils.utils import *
 
 import torchvision.transforms as T
@@ -261,7 +261,7 @@ class ImageGANAgentwFeedback(ImageGANAgent):
         super().__init__(gen_net = gen_net, *args, **kwargs)
 
     def train(self, train_dl: LabImageDataLoader, val_dl: LabImageDataLoader,
-              n_epochs=20, display_every=5, mode="gan", checkpoints=None, sizes = [64,128]):
+              n_epochs=20, display_every=5, mode="gan", checkpoints=("checkpoints/gan", 10, True), sizes = [64,128]):
 
         # Choose optimization strategy
         assert mode in ("pre", "gan")
@@ -274,9 +274,6 @@ class ImageGANAgentwFeedback(ImageGANAgent):
 
         # --- Main training loop ---
         for curr_epoch in range(n_epochs):
-            # Skip previous epochs when loaded from checkpoint
-            if last_epoch > curr_epoch:
-                continue
 
             reset_loss_meters(loss_meters)
             self.run_epoch(optimize, loss_meters, train_dl, sizes)
@@ -288,13 +285,12 @@ class ImageGANAgentwFeedback(ImageGANAgent):
                 cp_save_as = checkpoint + f"_epoch_{last_epoch:02d}"
                 self.save_model(cp_save_as, cp_overwrite)
 
-            # Give an update to performance
-            if last_epoch % display_every == 0:
-                # Print status
-                print(f"Epoch {last_epoch}/{n_epochs}")
-                log_results(loss_meters)
-                # Visualize generated images
-                self.evaluate(val_dl, mode, last_epoch, sizes)
+            
+            # Print status
+            print(f"Epoch {last_epoch}/{n_epochs}")
+            log_results(loss_meters)
+        # Visualize generated images
+        self.evaluate(val_dl, mode, last_epoch, sizes)
 
         return self
 
@@ -335,10 +331,10 @@ class ImageGANAgentwFeedback(ImageGANAgent):
         self.gen_net.train()
 
 
-    def colorize_images(self, batch, sizes: list[int] = [64, 128]):
+    def colorize_images(self, batch: LabImageBatch, sizes: list[int] = [64, 128]):
         self.gen_net.eval()
         L = batch.L
-        prev_pred_imgs = torch.zeros([L.shape[0], 2, 64, 64]).to(self._device)
+        prev_pred_imgs = torch.zeros([L.shape[0], 2, sizes[0], sizes[0]]).to(self._device)
         for size in sizes:
             transforms = [
                 # Uncomment for significant speed up
@@ -352,9 +348,22 @@ class ImageGANAgentwFeedback(ImageGANAgent):
 
         return LabImageBatch(L=transforms(L).to("cpu"), ab=prev_pred_imgs.to("cpu"), pad_mask=transforms(batch.pad_mask))
 
-    def colorize_image(self, L, sizes: list[int] = [64, 128]):
-        L =torch.unsqueeze(L, 0)
-        return self.colorize_images(L, sizes).batch[0]
+    def colorize_image(self, img: LabImage, sizes: list[int] = [64, 128]):
+        L =torch.unsqueeze(img.L, 0)
+        self.gen_net.eval()
+        prev_pred_imgs = torch.zeros([L.shape[0], 2, sizes[0], sizes[0]]).to(self._device)
+        for size in sizes:
+            transforms = [
+                # Uncomment for significant speed up
+                T.Resize((size, size), T.InterpolationMode.BICUBIC),  # ATTENTION: This skews/distorts the images!
+            ]
+
+            transforms = T.Compose([*transforms])
+            iter_input = torch.cat([transforms(L).to(self._device), transforms(prev_pred_imgs)], dim=1)
+
+            prev_pred_imgs = self.gen_net(iter_input)
+        final_prediction = prev_pred_imgs.to("cpu")
+        return LabImage(L=transforms(L).to("cpu")[0], ab=final_prediction[0])
 
     def visualize_example_batch(self, real_imgs, sizes = [64,128]):
         pred_imgs = self.colorize_images(real_imgs, sizes)
