@@ -329,7 +329,6 @@ class ImageGANAgentwFeedback(ImageGANAgent):
     def evaluate(self, val_dl, mode, last_epoch, sizes):
         self.gen_net.eval()
         val_batch = next(iter(val_dl))
-        val_pred_ab = self.gen_net(val_batch.L.to(self._device)).to("cpu")
         pred_imgs = self.colorize_images(val_batch, sizes)
         pred_imgs.visualize(other=val_batch, show=False, save=True,
                             fname=f"{mode}_epoch_{last_epoch}_{time.time()}.png")
