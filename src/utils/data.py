@@ -11,7 +11,11 @@ from torch.utils.data import Dataset, DataLoader
 
 from .image import *
 
-__all__ = ["URLs", "ColorizationDataset", "make_dataloader", "get_image_paths"]
+
+__all__ = ["URLs", "ColorizationDataset", "make_dataloader", "get_image_paths", "LabImageDataLoader"]
+
+
+LabImageDataLoader = DataLoader[LabImageBatch]
 
 
 class ColorizationDataset(Dataset):
@@ -46,7 +50,7 @@ class ColorizationDataset(Dataset):
     def __getitem__(self, item):
         img = Image.open(self.paths[item]).convert("RGB")
         img = self.transforms(img)
-        return LabImage(rgb=img)
+        return LabImage(rgb_=img)
 
     def __len__(self):
         return len(self.paths)
@@ -63,7 +67,7 @@ class ColorizationDataset(Dataset):
 
 
 def make_dataloader(batch_size=16, n_workers=4, pin_memory=True, rng=None,
-                    **kwargs) -> DataLoader[LabImageBatch]:
+                    **kwargs) -> LabImageDataLoader:
     dataset = ColorizationDataset(**kwargs)
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=n_workers,
                             collate_fn=dataset.collate_fn, pin_memory=pin_memory,

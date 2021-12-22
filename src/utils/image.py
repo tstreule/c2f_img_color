@@ -1,222 +1,266 @@
-from numpy.typing import ArrayLike
 import time
 import warnings
-import matplotlib.pyplot as plt
 from pathlib import Path
+from typing import Union
 
+from PIL.Image import Image
+import matplotlib.pyplot as plt
 from skimage.color import rgb2lab, lab2rgb
 
 import numpy as np
 import torch
-import torchvision.transforms as T
-from torchvision.transforms.functional import crop as T_functional_crop
 
 
 __all__ = ["LabImage", "LabImageBatch"]
 
 
-_IMG_SIZE = 2
+_IMG_SIZE = 2  # for plt
+Array = Union[list, np.ndarray, torch.Tensor, Image]
 
 
 class LabImage:
 
-    def __init__(self, lab: ArrayLike = None, rgb: ArrayLike = None,
-                 L: ArrayLike = None, ab: ArrayLike = None):
+    def __init__(self, *args, rgb_: Array = None, lab_: Array = None,
+                 lab: Array = None, L: Array = None, ab: Array = None):
         """
-        Data container for L*a*b images which quick and easy can be converted
-        to RGB and vice versa.
+        A Dataset optimized for storing and converting LAB Images.
 
         Args:
-            lab: L*a*b data array.
-            rgb: RGB data array.
-            L: `L`-part of L*a*b data array.
-                Has no effect when `ab` parameter is None!
-            ab: `ab`-part of L*a*b data array.
-                Has no effect when `L` parameter is None!
+            *args: catches positional arguments (no effect)
+            rgb_: RGB image array of shape (n, m, 3)
+            lab_: LAB image array of shape (n, m, 3)
+            lab: LAB image array of shape (3, n, m)
+            L: "L"-part of LAB image array of shape (1, n, m)
+            ab: "ab"-part of LAB image array of shape (2, n, m)
         """
+        assert not all(x is not None for x in [rgb_, lab_, lab, not (L is None or ab is None)]), \
+            "Setting values in more than one way is ambiguous"
 
-        self._lab: np.ndarray
-        self.from_lab(lab) if (lab is not None) else None
-        self.from_rgb(rgb) if (rgb is not None) else None
-        self.from_L_ab(L, ab) if (L is not None) and (ab is not None) else None
-
-    # === Data Setter ===
-
-    def _store(self, lab=None):
-        self._lab = np.array(lab)
-        return self
-
-    def from_lab(self, lab):
-        lab = np.array(lab)
-        if len(lab) == 3:  # (3, n, n)
-            lab = lab.transpose((1, 2, 0))
-        return self._store(lab=lab)
-
-    def from_rgb(self, rgb):
-        rgb = np.array(rgb)
-        lab = rgb2lab(rgb).astype("float32")
-        return self._store(lab=lab)
-
-    def from_L_ab(self, L, ab):
-        L = (L + 1.0) * 50.0
-        ab = ab * 110.0
-        lab = np.concatenate([L, ab], axis=0)
-        return self.from_lab(lab)
-
-    # === Data Getter ===
+        self._lab = np.array([])  # 3 x n x m
+        if any(x is not None for x in [rgb_, lab_]):
+            self.from_true_values(rgb_=rgb_, lab_=lab_)
+        elif any(x is not None for x in [lab, L, ab]):
+            self.from_normalized_values(lab=lab, L=L, ab=ab)
 
     def __str__(self):
         cname = self.__class__.__name__
-        return f"{cname}{self._lab.shape}"
+        return f"<{cname} lab={self._lab.shape}>"
+
+    # === Data Setter ===
+
+    def _store_lab(self, lab: np.ndarray, clip=True, tol=0.0):
+        is_valid = np.greater_equal(lab, - 1.0 - tol) & np.less_equal(lab, + 1.0 + tol)
+        num_violations = lab.size - is_valid.sum()
+        if num_violations > 0:
+            warnings.warn(
+                f"Data appears to be non-normalized. {num_violations} / {lab.size} "
+                f"values are out of the tolerance area: |x| <= 1.0 + {tol}.")
+        if clip:
+            self._lab = np.clip(lab, -1., 1.)
+        else:
+            self._lab = np.array(lab)
+
+    def from_true_values(self, *args, rgb_=None, lab_=None):
+        assert not all(x is not None for x in [rgb_, lab_]), \
+            "Setting both, rgb_ and lab_ values, is ambiguous"
+        if rgb_ is not None:
+            rgb_ = np.array(rgb_)
+            lab_ = rgb2lab(rgb_).astype(np.float32)
+        elif lab_ is not None:
+            lab_ = np.array(lab_)
+        # Normalize (between -1 and +1)
+        lab = lab_.transpose((2, 0, 1))
+        lab[0] = lab[0] / 50.0 - 1.0
+        lab[1:] /= 110.0
+        self._store_lab(lab=lab)
+        return self
+
+    def from_normalized_values(self, *args, L=None, ab=None, lab=None):
+        assert not all(x is not None for x in [lab, L, ab]), \
+            "Setting both, lab and L-ab values, is ambiguous"
+        if L is not None and ab is not None:
+            lab = np.concatenate([L, ab], axis=0)
+        elif lab is not None:
+            lab = np.array(lab)
+        self._store_lab(lab)
+        return self
+
+    # === Data Getter ===
 
     @property
-    def rgb(self):
+    def shape(self):
+        return self._lab.shape  # 3 x n x m
+
+    @property
+    def lab(self) -> torch.Tensor:
+        """shape=(3, n, m)"""
+        return torch.tensor(self._lab)
+
+    @property
+    def L(self) -> torch.Tensor:
+        """shape=(1, n, m)"""
+        return self.lab[[0], ...]
+
+    @property
+    def ab(self) -> torch.Tensor:
+        """shape=(2, n, m)"""
+        return self.lab[[1, 2], ...]
+
+    @property
+    def lab_(self) -> np.ndarray:
+        """shape=(n, m, 3)"""
+        L_ = (self.L + 1.0) * 50.0
+        ab_ = self.ab * 110.0
+        return np.concatenate([L_, ab_], axis=0).transpose((1, 2, 0))
+
+    @property
+    def rgb_(self) -> np.ndarray:
+        """shape=(n, m, 3)"""
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            # warnings.filterwarnings("ignore", "UserWarning")
             # Ignore UserWarning: Color data out of range: Z < 0
-            rgb = lab2rgb(self._lab)
-        return torch.tensor(rgb)
-
-    @property
-    def lab(self):
-        return torch.tensor(self._lab).permute(2, 0, 1)
-
-    @property
-    def L(self):
-        return self.lab[[0], ...] / 50. - 1.  # between -1 and 1
-
-    @property
-    def ab(self):
-        return self.lab[[1, 2], ...] / 110.  # between -1 and 1
+            warnings.simplefilter("ignore", UserWarning)
+            return lab2rgb(self.lab_)
 
     # === Other ===
 
-    def visualize(self, other=None, show=True, save=False):
-        other: LabImage
+    def visualize(self, other: "LabImage" = None, show=True, save=False, path=None, fname=None):
         n_imgs = 3 if other else 2
-
-        fig, axs = plt.subplots(1, n_imgs, figsize=(n_imgs*_IMG_SIZE, _IMG_SIZE))
+        # Make figure
+        fig, axs = plt.subplots(1, n_imgs, figsize=(n_imgs * _IMG_SIZE, _IMG_SIZE))
         axs[0].imshow(self.L[0].numpy(), cmap="gray")
-        axs[1].imshow(self.rgb.numpy())
+        axs[1].imshow(self.rgb_)
         if other:
-            axs[2].imshow(other.rgb.numpy())
+            axs[2].imshow(other.rgb_)
+        # Prettify
         [ax.axis("off") for ax in axs]
         fig.tight_layout()
         if show:
             fig.show()
         if save:
-            Path("imgs").mkdir(exist_ok=True)
-            fig.savefig(f"imgs/colorization_{time.time()}.png")
+            path = Path("imgs") if not path else Path(path)
+            path.mkdir(parents=True, exist_ok=True)
+            fname = f"color_img_{time.time()}.png" if not fname else str(fname)
+            fig.savefig(path / fname)
 
 
 class LabImageBatch:
 
     def __init__(self, batch: list[LabImage] = None,
-                 L: torch.Tensor = None, ab: torch.Tensor = None):
+                 L: Array = None, ab: Array = None, pad_mask: Array = None):
         """
-        Data batch container for L*a*b images which quick and easy can be
-        converted to RGB and vice versa.
-
+        A class capable of efficiently storing batched `LabImage`s.
+        
         Args:
-            batch: An iterable containing `LabImage`s
-            L: 4D Tensor with `LabImage.L` attributes
-            ab: 4D Tensor with `LabImage.ab` attributes
+            batch: array/batch of `LabImage`s
+            L: an array of shape (batch_size, 1, n, m) containing "L"-part of all LAB images
+            ab: an array of shape (batch_size, 2, n, m) containing "ab"-part of all LAB images
+            pad_mask: a mask of shape (batch_size, 3, n, m) that indicates padded values
         """
+        assert not all([batch, L, ab]), "Setting all values is ambiguous"
 
-        self.batch: list[LabImage] = []
-        self.padding: list[list[int]] = []  # padding for the left, top, right and bottom borders respectively
-
+        self._lab_batch = np.ma.array([])  # n_batches x 3 x n x m
         if batch is not None:
-            self._collate(batch)
-        elif (L is not None) and (ab is not None):
-            self.from_L_ab(L, ab)
+            self.from_batch(batch)
+        elif all(x is not None for x in[L, ab, pad_mask]):
+            self.from_L_ab(L, ab, pad_mask)
 
-    def _collate(self, batch: list[LabImage], size_criterion: callable = np.max):
-        assert all([isinstance(img, LabImage) for img in batch])
-
-        # Create image cropper s.t. all images in batch have same size
-        img_sizes = np.array([img.rgb.shape[:2] for img in batch])
-        if size_criterion == np.max:
-            size_diffs = - img_sizes + [size_criterion(img_sizes, axis=0)]
-            self.padding = [[0, 0, right_pad, bottom_pad] for bottom_pad, right_pad in size_diffs]
-            transforms = [T.Pad(padding=pad) for pad in self.padding]
-        else:
-            size = size_criterion(img_sizes, axis=0).astype("int")
-            transforms = [T.RandomCrop(size=size, pad_if_needed=True)
-                          for _ in range(len(batch))]
-
-        # Store cropped (or padded) images and return
-        batch = [LabImage(lab=t(img.lab)) for t, img in zip(transforms, batch)]
-        self.batch = batch
-
-        return self
+    def __str__(self):
+        cname = self.__class__.__name__
+        return f"<{cname} lab_batch={self._lab_batch.shape}>"
 
     # === Data Setter ===
 
-    def from_L_ab(self, L, ab):
-        batch = [LabImage(L=L_.detach(), ab=ab_.detach()) for L_, ab_ in zip(L, ab)]
-        self.batch = batch
+    def _store_lab_batch(self, lab_batch, pad_mask, fill_value=-1.0):
+        pad_mask = np.broadcast_to(pad_mask, lab_batch.shape).astype("bool")
+        self._lab_batch = np.ma.array(lab_batch, mask=pad_mask, fill_value=fill_value)
+
+    def from_L_ab(self, L, ab, pad_mask):
+        if all(isinstance(x, torch.Tensor) for x in [L, ab]):
+            L = L.detach().numpy()
+            ab = ab.detach().numpy()
+        if isinstance(pad_mask, torch.Tensor):
+            pad_mask = pad_mask.detach().numpy()
+        lab_batch = np.concatenate([L, ab], axis=1)
+        self._store_lab_batch(lab_batch, pad_mask)
+        return self
+
+    def from_batch(self, batch):
+        assert all(isinstance(img, LabImage) for img in batch)
+
+        img_shapes = np.array([img.shape for img in batch])
+        img_size_max = np.max(img_shapes, axis=0)
+
+        lab_batch = np.empty(shape=(len(batch), *tuple(img_size_max)))
+        lab_batch[:] = np.NaN
+        for i, img in enumerate(batch):
+            idx1, idx2 = tuple(img_shapes[i, 1:])
+            lab_batch[i, :, :idx1, :idx2] = img.lab.numpy()
+        self._store_lab_batch(lab_batch, np.isnan(lab_batch))
+        return self
 
     # === Data Getter ===
 
-    def __getitem__(self, item) -> LabImage:
-        image = self.batch[item]
-        if self.padding:
-            width, height = np.array(image.lab.shape[1:]) - self.padding[item][2:]
-            image = LabImage(lab=T_functional_crop(image.lab, 0, 0, height, width))
-        return image
-
-    def get_padding_mask(self):
-        mask = torch.zeros(self.lab.shape, dtype=torch.bool)
-        for i in range(mask.shape[0]):
-            width, height = np.array(self[i].lab.shape[1:]) - self.padding[i][2:]
-            mask[i, :, width:, height:] = 1
-        return mask
+    @property
+    def lab(self) -> torch.Tensor:
+        """shape=(batch_size, 3, n, m)"""
+        # Masked values are filled with pad_fill_value
+        return torch.tensor(np.ma.filled(self._lab_batch), dtype=torch.float32)
 
     @property
-    def lab(self):
-        labs = [img.lab for img in self.batch]  # collate
-        return torch.stack(labs, dim=0)
+    def L(self) -> torch.Tensor:
+        """shape=(batch_size, 1, n, m)"""
+        return self.lab[:, :1]
 
     @property
-    def rgb(self):
-        rgbs = [img.rgb for img in self.batch]  # collate
-        return torch.stack(rgbs, dim=0)
+    def ab(self) -> torch.Tensor:
+        """shape=(batch_size, 2, n, m)"""
+        return self.lab[:, 1:]
 
     @property
-    def L(self):
-        Ls = [img.L for img in self.batch]  # collate
-        return torch.stack(Ls, dim=0)
+    def pad_mask(self) -> torch.BoolTensor:
+        """shape=(batch_size, 1, n, m)"""
+        np_mask = np.ma.getmask(self._lab_batch)
+        np_mask = np_mask[:, :1, :, :]  # make shape broadcastable
+        return torch.BoolTensor(np_mask)
 
     @property
-    def ab(self):
-        abs_ = [img.ab for img in self.batch]  # collate
-        return torch.stack(abs_, dim=0)
+    def pad_fill_value(self) -> float:
+        return self._lab_batch.fill_value
 
-    @property
-    def batch_size(self):
-        return len(self.batch)
+    def __len__(self) -> int:
+        return self._lab_batch.shape[0]
+
+    def __getitem__(self, idx) -> LabImage:
+        padded_lab = np.ma.filled(self._lab_batch[idx], fill_value=np.NaN)
+        # Remove padding in both dimensions
+        mask = ~ np.isnan(padded_lab).any(axis=0, keepdims=True)
+        ax1 = mask.any(axis=2).sum()
+        ax2 = mask.any(axis=1).sum()
+        lab = padded_lab[:, :ax1, :ax2]
+        return LabImage(lab=lab)
 
     # === Other ===
 
-    def visualize(self, other=None, show=True, save=False, draw_n=6):
-        other: LabImageBatch
+    def visualize(self, other: "LabImageBatch" = None, draw_n=6,
+                  show=True, save=False, path=None, fname=None):
         n_rows = 3 if other else 2
-
-        if not draw_n or not (0 < draw_n < self.batch_size):
-            draw_n = self.batch_size
-
-        fig, axs = plt.subplots(n_rows, draw_n, figsize=(draw_n*_IMG_SIZE, n_rows*_IMG_SIZE))
+        # Handle number of images to draw
+        if not draw_n or not (0 < draw_n < len(self)):
+            draw_n = len(self)
+        # Make figure
+        fig, axs = plt.subplots(n_rows, draw_n, figsize=(draw_n * _IMG_SIZE, n_rows * _IMG_SIZE))
         for i, ax_ in enumerate(axs.T):
             ax_[0].imshow(self[i].L[0].numpy(), cmap="gray")
-            ax_[1].imshow(self[i].rgb.numpy())
+            ax_[1].imshow(self[i].rgb_)
             if other:
-                ax_[2].imshow(other[i].rgb.numpy())
-            [ax.axis("off") for ax in ax_]
+                ax_[2].imshow(other[i].rgb_)
+        # Prettify
+        [[ax.axis("off") for ax in ax_] for ax_ in axs]
         fig.tight_layout()
         if show:
             fig.show()
         if save:
-            Path("imgs").mkdir(exist_ok=True)
-            fig.savefig(f"imgs/colorization_{time.time()}.png")
+            path = Path("imgs") if not path else Path(path)
+            path.mkdir(parents=True, exist_ok=True)
+            fname = f"color_batch_{time.time()}.png" if not fname else str(fname)
+            fig.savefig(path / fname)
