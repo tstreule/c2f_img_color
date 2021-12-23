@@ -109,8 +109,8 @@ class ImageGANAgent:
             if last_epoch > curr_epoch:
                 continue
 
-            reset_loss_meters(loss_meters)
             self._run_epoch(optimize, loss_meters, train_dl)
+            reset_loss_meters(loss_meters)
 
             # Make checkpoint
             last_epoch = curr_epoch + 1  # note that it's not linked to `self` since it's a primitive data type
@@ -213,6 +213,10 @@ class ImageGANAgent:
         pred_imgs = LabImageBatch(lab=pred_lab, pad_mask=real_imgs.pad_mask)
         pred_imgs.visualize(other=real_imgs, **kwargs)
         self.gen_net.train(prev_train_mode)
+
+    @property
+    def loss_meters(self) -> dict[str, LossMeterDict]:
+        return {"pre": self._pre_loss_meters, "gan": self._gan_loss_meters}
 
     # === Save and load model ===
 

@@ -120,7 +120,8 @@ class WelfordMeter:
         self._S = 0
         # Add previous sub buffer (if exists) to main buffer
         if self._sub_buffer is not None and (~np.isnan(self._sub_buffer)).any():
-            self._main_buffer += [self._sub_buffer]
+            mask = np.isnan(self._sub_buffer).any(axis=1)
+            self._main_buffer += [self._sub_buffer[~mask]]
         # Create new, empty sub buffer
         self._sub_buffer = np.empty((2, 3), dtype=np.float16)
         self._sub_buffer[:] = np.NaN
@@ -157,3 +158,7 @@ class WelfordMeter:
         if self.counter == 1:
             return 0.0
         return np.sqrt(self._S / self.counter)
+
+    @property
+    def buffer_data(self):
+        return self._main_buffer
