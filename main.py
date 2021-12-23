@@ -9,6 +9,8 @@ from src.utils.data import URLs, get_image_paths, make_dataloader
 import argparse
 
 parser = argparse.ArgumentParser()
+parser.add_argument("-m", "--agent-mode", default="basic",
+                    help="agent training mode; choice of 'basic' or 'c2f'")
 # Dataset
 parser.add_argument("--dataset", type=str, default=URLs.COCO_SAMPLE,
                     help="name of a `fastai` dataset")
@@ -53,7 +55,8 @@ def main():
     # Argument Parser
 
     # Uncomment when you want hard-coded parse args
-    hard_args = "--dataset-size 32 --pre-num-epochs 1 --gan-num-epochs 1 --batch-size 2 "
+    hard_args = "-m c2f "
+    hard_args += "--dataset-size 32 --pre-num-epochs 1 --gan-num-epochs 1 --batch-size 2 "
     hard_args += "--cp-dir checkpoints/c2f/ "
     # hard_args += "--pre-cp pre_final.pt "
     # hard_args += "--gan-cp gan_final.pt "
@@ -79,7 +82,14 @@ def main():
 
     print("\n=====================")
     print("Initialize agent...")
-    agent = C2FImageGANAgent()
+    if args.agent_mode == "basic":
+        agent = ImageGANAgent()
+    elif args.agent_mode == "c2f":
+        agent = C2FImageGANAgent()
+    else:
+        agent = ImageGANAgent()
+        print(f"INFO: '--agent-mode {args.agent_mode}' is no valid choice. Will fall back to default...")
+    print("Chosen agent:", agent.__class__.__name__)
     print(" ...done")
 
     # Set default checkpoint args
@@ -114,11 +124,6 @@ def main():
 
     print("\n=====================")
     print("Evaluation...")
-
-    # # Retrieve trained generator
-    # # -> you can directly call `agent(batch.L)`
-    # generator = agent.gen_net
-    # generator.eval()
 
     # Visualize example batch
     real_imgs = next(iter(val_dl))
