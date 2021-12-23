@@ -5,6 +5,7 @@ import time
 
 import torch
 from torch import nn, optim
+from kornia.losses import ssim_loss, psnr_loss
 
 from .discriminator import PatchDiscriminator
 from .generator import build_res_u_net
@@ -26,7 +27,8 @@ def create_loss_meters(pretraining=False) -> LossMeterDict:
     else:
         # TODO: What about 'SSIM' loss?
         loss_names = ["dis_loss_fake", "dis_loss_real", "dis_loss",
-                      "gen_loss_gan", "gen_loss_mae", "gen_loss"]
+                      "gen_loss_gan", "gen_loss_mae", "gen_loss",
+                      "ssim_loss", "psnr_loss"]
     loss_meters = {name: WelfordMeter() for name in loss_names}
     return loss_meters
 
@@ -184,7 +186,7 @@ class ImageGANAgent:
         fake_loss = self._gan_crit(fake_preds, False)
         dis_loss = (real_loss + fake_loss) / 2.
         # Logging
-        loss_dict = dict(dis_loss_real=real_loss, dis_loss_fake=fake_loss, dis_loss=dis_loss)
+        loss_dict = {"dis_loss_real": real_loss, "dis_loss_fake": fake_loss, "dis_loss": dis_loss}
         return dis_loss, loss_dict
 
     def _gen_loss(self, real_imgs: torch.Tensor, fake_imgs: torch.Tensor) \
@@ -194,7 +196,10 @@ class ImageGANAgent:
         mae_loss = self._mae_crit(real_imgs[:, 1:], fake_imgs[:, 1:])  # use `ab` part only
         gen_loss = gan_loss + mae_loss * self._gen_lambda_mae
         # Logging
-        loss_dict = dict(gen_loss_gan=gan_loss, gen_loss_mae=mae_loss, gen_loss=gen_loss)
+        ssim_loss_ = ssim_loss(real_imgs, fake_imgs, 5)  # is symmetric
+        psnr_loss_ = psnr_loss(real_imgs, fake_imgs, 1.)  # is not(?) symmetric
+        loss_dict = {"gen_loss_gan": gan_loss, "gen_loss_mae": mae_loss, "gen_loss": gen_loss,
+                     "ssim_loss": ssim_loss_, "psnr_loss": psnr_loss_}
         return gen_loss, loss_dict
 
     # === Generate ===
