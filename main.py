@@ -89,7 +89,6 @@ def main():
     elif args.agent_mode == "c2f":
         agent = C2FImageGANAgent()
     else:
-        args.agent_mode = "basic"
         agent = ImageGANAgent()
         print(f"INFO: '--agent-mode {args.agent_mode}' is no valid choice. Will fall back to default...")
     print("Chosen agent:", agent.__class__.__name__)
