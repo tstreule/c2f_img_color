@@ -270,10 +270,9 @@ class C2FImageGANAgent(ImageGANAgent):
             real_imgs = batch.lab.to(self._device)
             pred_imgs = self._c2f_recursive(real_imgs, opt=(optimize, loss_meters, batch))
             # enforce zero loss at padded values
-            pred_imgs.masked_fill_(batch.pad_mask.to(self._device), batch.pad_fill_value)
+            #pred_imgs.masked_fill_(batch.pad_mask.to(self._device), batch.pad_fill_value)
             # Optimize
-            loss_dict = optimize(real_imgs, pred_imgs)
-            update_loss_meters(loss_meters, loss_dict, len(batch))
+
 
     def _c2f_recursive(self, real_imgs: torch.Tensor, min_size=64, opt=None) -> torch.Tensor:
         real_sizes = real_imgs.shape[2:]
@@ -285,30 +284,30 @@ class C2FImageGANAgent(ImageGANAgent):
         else:
             # Initialize dummy predictions
             # when not training `real_imgs` can also be just a "L"
-            prev_pred_imgs = torch.zeros(real_imgs.shape[0], 3, *real_imgs.shape[2:])
+            prev_pred_imgs = torch.zeros(real_imgs.shape[0], 2, *real_imgs.shape[2:])
 
         # Resizer for scaling up or down
         resize = T.Resize(tuple(real_sizes))
 
         # Prediction
         L = real_imgs[:, :1].to(self._device)
-        ab = resize(prev_pred_imgs[:, 1:]).to(self._device)
+        ab = resize(prev_pred_imgs.detach()).to(self._device)
         pred_input = torch.cat([L, ab], dim=1)
         pred_ab = self.gen_net(pred_input)
         pred_imgs = torch.cat([L, pred_ab], dim=1)
 
         # TODO: Debug - why can't we do that...?
         # # Optimize
-        # if opt is not None:
-        #     optimize, loss_meters, batch = opt
-        #     # enforce zero loss at padded values
-        #     pred_imgs.masked_fill_(resize(batch.pad_mask).to(self._device), batch.pad_fill_value)
-        #     # Optimize
-        #     loss_dict = optimize(real_imgs, pred_imgs)
-        #     update_loss_meters(loss_meters, loss_dict, len(batch))
-        #     print("Successful 'til here")
+        if opt is not None:
+            optimize, loss_meters, batch = opt
+            # enforce zero loss at padded values
+            pred_imgs.masked_fill_(resize(batch.pad_mask).to(self._device), batch.pad_fill_value)
+            # Optimize
+            loss_dict = optimize(real_imgs, pred_imgs)
+            update_loss_meters(loss_meters, loss_dict, len(batch))
+            print("Successful 'til here")
 
-        return pred_imgs
+        return pred_ab
 
     # === Generate ===
 
