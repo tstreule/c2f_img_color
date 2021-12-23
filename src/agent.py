@@ -49,7 +49,7 @@ def update_loss_meters(loss_meters: LossMeterDict, update_dict: dict[str, float]
 def log_results(loss_meters: LossMeterDict):
     fill = max(len(name) for name in loss_meters)
     for loss_name, loss_meter in loss_meters.items():
-        print(f"{loss_name: <{fill}}: {loss_meter.mean:.4f} +- {loss_meter.std:.4f}")
+        print(f"{loss_name: <{fill}}: {loss_meter.mean:.4f} ± {loss_meter.std:.4f}")
 
 
 # === Main ===
@@ -306,7 +306,8 @@ class C2FImageGANAgent(ImageGANAgent):
             pred_imgs.masked_fill_(resize(batch.pad_mask).to(self._device), batch.pad_fill_value)
             # Optimize
             loss_dict = optimize(real_imgs, pred_imgs)
-            update_loss_meters(loss_meters, loss_dict, len(batch))
+            if rec_depth == 0:  # don't log recursion losses
+                update_loss_meters(loss_meters, loss_dict, len(batch))
 
         return pred_imgs
 
