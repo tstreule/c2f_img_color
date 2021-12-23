@@ -10,9 +10,7 @@ from skimage.color import rgb2lab, lab2rgb
 import numpy as np
 import torch
 
-
 __all__ = ["LabImage", "LabImageBatch"]
-
 
 _IMG_SIZE = 2  # for plt
 Array = Union[list, np.ndarray, torch.Tensor, Image]
@@ -144,7 +142,7 @@ class LabImageBatch:
                  L: Array = None, ab: Array = None, pad_mask: Array = None):
         """
         A class capable of efficiently storing batched `LabImage`s.
-        
+
         Args:
             batch: array/batch of `LabImage`s
             L: an array of shape (batch_size, 1, n, m) containing "L"-part of all LAB images
