@@ -20,7 +20,7 @@ Array = Union[list, np.ndarray, torch.Tensor, Image]
 
 class LabImage:
 
-    def __init__(self, *args, rgb_: Array = None, lab_: Array = None,
+    def __init__(self, *, rgb_: Array = None, lab_: Array = None,
                  lab: Array = None, L: Array = None, ab: Array = None):
         """
         A Dataset optimized for storing and converting LAB Images.
@@ -60,7 +60,7 @@ class LabImage:
         else:
             self._lab = np.array(lab)
 
-    def from_true_values(self, *args, rgb_=None, lab_=None):
+    def from_true_values(self, *, rgb_=None, lab_=None):
         assert not all(x is not None for x in [rgb_, lab_]), \
             "Setting both, rgb_ and lab_ values, is ambiguous"
         if rgb_ is not None:
@@ -75,7 +75,7 @@ class LabImage:
         self._store_lab(lab=lab)
         return self
 
-    def from_normalized_values(self, *args, L=None, ab=None, lab=None):
+    def from_normalized_values(self, *, L=None, ab=None, lab=None):
         assert not all(x is not None for x in [lab, L, ab]), \
             "Setting both, lab and L-ab values, is ambiguous"
         if L is not None and ab is not None:
@@ -134,13 +134,7 @@ class LabImage:
         # Prettify
         [ax.axis("off") for ax in axs]
         fig.tight_layout()
-        if show:
-            fig.show()
-        if save:
-            path = Path("imgs") if not path else Path(path)
-            path.mkdir(parents=True, exist_ok=True)
-            fname = f"color_img_{time.time()}.png" if not fname else str(fname)
-            fig.savefig(path / fname)
+        show_save_image(fig, show, save, path, f"{fname}_img")
 
 
 class LabImageBatch:
@@ -256,6 +250,9 @@ class LabImageBatch:
         # Handle number of images to draw
         if not draw_n or not (0 < draw_n < len(self)):
             draw_n = len(self)
+        # If single image
+        if draw_n == 1:
+            return self[0].visualize(other[0], show=show, save=save, path=path, fname=fname)
         # Make figure
         fig, axs = plt.subplots(n_rows, draw_n, figsize=(draw_n * _IMG_SIZE, n_rows * _IMG_SIZE))
         for i, ax_ in enumerate(axs.T):
@@ -266,10 +263,14 @@ class LabImageBatch:
         # Prettify
         [[ax.axis("off") for ax in ax_] for ax_ in axs]
         fig.tight_layout()
-        if show:
-            fig.show()
-        if save:
-            path = Path("imgs") if not path else Path(path)
-            path.mkdir(parents=True, exist_ok=True)
-            fname = f"color_batch_{time.time()}.png" if not fname else str(fname)
-            fig.savefig(path / fname)
+        show_save_image(fig, show, save, path, f"{fname}_batch")
+
+
+def show_save_image(fig, show: bool, save: bool, path=None, fname=None):
+    if show:
+        fig.show()
+    if save:
+        path = Path("imgs") if not path else Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        fname = f"{fname.rstrip('_')}_{time.time()}.png"
+        fig.savefig(path / fname)
