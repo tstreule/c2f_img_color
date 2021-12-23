@@ -21,26 +21,32 @@ def main():
     val_dl = make_dataloader(8, 4,
                              paths=test_paths, split="test")
     print(" ...done")
-    checkpoint_path = r"checkpoints/gan_epoch_60.pt"
+    checkpoint_path = r"checkpoints/pre_epoch_10.pt"
     print("\n=====================")
     print("Initialize agent...")
     agent = ImageGANAgentwFeedback()
-    agent.load_model(checkpoint_path)
+    agent.load_model(
+
+    )
     print(" ...done")
 
     print("Training GAN...")
-    agent.train(train_dl, val_dl, 40,sizes=[32,64,128], mode="pre")
     agent.evaluate(val_dl, "pre", 100, [128, 256])
-    agent.train(train_dl, val_dl, 50,sizes=[32,64,128], mode="gan")
-    agent.train(train_dl, val_dl, 50, sizes=[64,128], mode="gan")
+    agent.train(train_dl, val_dl, 10,sizes=[32,64,128], mode="pre",checkpoints=("checkpoints/pre", 10, True))
+    agent.evaluate(val_dl, "pre", 100, [128, 256])
+    agent.train(train_dl, val_dl, 10,sizes=[32,64,128], mode="gan",checkpoints=("checkpoints/gan_stage_1", 10, True))
+    agent.train(train_dl, val_dl, 10, sizes=[64,128], mode="gan",checkpoints=("checkpoints/gan_stage_2", 10, True))
     agent.evaluate(val_dl, "stage1", 100, [128, 256])
+
     train_dl = make_dataloader(4, 4,paths=train_paths, split="train", rng=torch_rng)
     val_dl = make_dataloader(2, 4, paths=test_paths, split="test")
 
-    agent.train(train_dl, val_dl, 20,sizes=[64,128,256], mode="gan")
+    agent.train(train_dl, val_dl, 10,sizes=[64,128,256], mode="gan",checkpoints=("checkpoints/gan_stage_3", 10, True))
+
     train_dl = make_dataloader(2, 4,paths=train_paths, split="train", rng=torch_rng)
     val_dl = make_dataloader(2, 4, paths=test_paths, split="test")
-    agent.train(train_dl, val_dl, 20,sizes=[128,256,512], mode="gan")
+
+    agent.train(train_dl, val_dl, 10,sizes=[128,256,512], mode="gan",checkpoints=("checkpoints/gan_stage_4", 10, True))
     agent.evaluate(val_dl,"gan", 100, [128,256])
     agent.save_model("checkpoints/train_stages.pt", overwrite=True)
 

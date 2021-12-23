@@ -284,7 +284,7 @@ class ImageGANAgentwFeedback(ImageGANAgent):
             if checkpoint and last_epoch % cp_after_each == 0:
                 cp_save_as = checkpoint + f"_epoch_{last_epoch:02d}"
                 self.save_model(cp_save_as, cp_overwrite)
-
+                self.evaluate(val_dl, mode, last_epoch, sizes)
             
             # Print status
             print(f"Epoch {last_epoch}/{n_epochs}")
@@ -302,6 +302,9 @@ class ImageGANAgentwFeedback(ImageGANAgent):
                 prev_pred_imgs, real_imgs, fake_imgs = self.one_iteration(batch, size, prev_pred_imgs)
                 loss_dict = optimize(real_imgs, fake_imgs)
                 update_loss_meters(loss_meters, loss_dict, len(batch))
+
+            if i % 100 == 0:
+                self.evaluate(train_dl, "training", 69, sizes)
 
     def one_iteration(self, batch, size, prev_pred_imgs):
         transforms = [

@@ -211,6 +211,7 @@ class LabImageBatch:
         # Masked values are filled with pad_fill_value
         return torch.tensor(np.ma.filled(self._lab_batch), dtype=torch.float32)
 
+
     @property
     def L(self) -> torch.Tensor:
         """shape=(batch_size, 1, n, m)"""
@@ -269,3 +270,5 @@ class LabImageBatch:
             path.mkdir(parents=True, exist_ok=True)
             fname = f"color_batch_{time.time()}.png" if not fname else str(fname)
             fig.savefig(path / fname)
+            plt.close(fig)
+
