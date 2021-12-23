@@ -134,7 +134,8 @@ class LabImage:
         # Prettify
         [ax.axis("off") for ax in axs]
         fig.tight_layout()
-        show_save_image(fig, show, save, path, f"{fname}_img")
+        fname = f"{fname}_" if fname is not None else ""
+        show_save_image(fig, show, save, path, f"{fname}img")
 
 
 class LabImageBatch:
@@ -263,7 +264,8 @@ class LabImageBatch:
         # Prettify
         [[ax.axis("off") for ax in ax_] for ax_ in axs]
         fig.tight_layout()
-        show_save_image(fig, show, save, path, f"{fname}_batch")
+        fname = f"{fname}_" if fname is not None else ""
+        show_save_image(fig, show, save, path, f"{fname}batch")
 
 
 def show_save_image(fig, show: bool, save: bool, path=None, fname=None):
