@@ -257,10 +257,15 @@ class ImageGANAgent:
 
 class C2FImageGANAgent(ImageGANAgent):
 
-    def __init__(self, *args, gen_net_params=(3, 2, 128), shrink_size=2.0, **kwargs):
+    def __init__(self, *args, gen_net_params=(3, 2, 128), shrink_size=2.0,
+                 min_ax_size=64, max_c2f_depth=5, **kwargs):
         super().__init__(*args, gen_net_params=gen_net_params,  **kwargs)
         # Define shrink size parameter (larger values speed up training and prediction)
         self.shrink_size = shrink_size
+        # Define minimal size an image axis must have for recursion
+        self.min_ax_size = min_ax_size
+        # Define maximal recursive depth
+        self.max_c2f_depth = max_c2f_depth
 
     # === Training ===
 
@@ -268,46 +273,42 @@ class C2FImageGANAgent(ImageGANAgent):
         for i, batch in tqdm(enumerate(train_dl)):
             # Get real images
             real_imgs = batch.lab.to(self._device)
+            # Optimization is done inside recursive loop
             pred_imgs = self._c2f_recursive(real_imgs, opt=(optimize, loss_meters, batch))
-            # enforce zero loss at padded values
-            #pred_imgs.masked_fill_(batch.pad_mask.to(self._device), batch.pad_fill_value)
-            # Optimize
 
-
-    def _c2f_recursive(self, real_imgs: torch.Tensor, min_size=64, opt=None) -> torch.Tensor:
+    def _c2f_recursive(self, real_imgs: torch.Tensor, opt=None, rec_depth=0) -> torch.Tensor:
         real_sizes = real_imgs.shape[2:]
         smaller_sizes = [int(size / self.shrink_size) for size in real_sizes]
 
-        if not any(size < min_size for size in smaller_sizes):
-            resize = T.Resize(tuple(smaller_sizes))
-            prev_pred_imgs = self._c2f_recursive(resize(real_imgs), min_size, opt)
-        else:
+        if any(size < self.min_ax_size for size in smaller_sizes) \
+                or rec_depth >= self.max_c2f_depth:
             # Initialize dummy predictions
             # when not training `real_imgs` can also be just a "L"
-            prev_pred_imgs = torch.zeros(real_imgs.shape[0], 2, *real_imgs.shape[2:])
+            prev_pred_imgs = torch.zeros(real_imgs.shape[0], 3, *real_imgs.shape[2:])
+        else:
+            resize = T.Resize(tuple(smaller_sizes))
+            prev_pred_imgs = self._c2f_recursive(resize(real_imgs), opt, rec_depth+1)
 
         # Resizer for scaling up or down
         resize = T.Resize(tuple(real_sizes))
 
         # Prediction
         L = real_imgs[:, :1].to(self._device)
-        ab = resize(prev_pred_imgs.detach()).to(self._device)
+        ab = resize(prev_pred_imgs.detach()[:, 1:]).to(self._device)
         pred_input = torch.cat([L, ab], dim=1)
         pred_ab = self.gen_net(pred_input)
         pred_imgs = torch.cat([L, pred_ab], dim=1)
 
-        # TODO: Debug - why can't we do that...?
-        # # Optimize
+        # Optimize
         if opt is not None:
             optimize, loss_meters, batch = opt
-            # enforce zero loss at padded values
+            # Enforce zero loss at padded values
             pred_imgs.masked_fill_(resize(batch.pad_mask).to(self._device), batch.pad_fill_value)
             # Optimize
             loss_dict = optimize(real_imgs, pred_imgs)
             update_loss_meters(loss_meters, loss_dict, len(batch))
-            print("Successful 'til here")
 
-        return pred_ab
+        return pred_imgs
 
     # === Generate ===
 
