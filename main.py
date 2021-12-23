@@ -58,11 +58,11 @@ def main():
     # Argument Parser
 
     # Uncomment when you want hard-coded parse args
-    hard_args = "-m c2f "
-    hard_args += "--dataset-size 10000 --pre-num-epochs 0 --gan-num-epochs 50 --batch-size 8 "
-    #hard_args += "--pre-cp pre_final.pt "
-    #hard_args += "--gan-cp gan_stage_2_epoch_10.pt "
-    args = parser.parse_args(hard_args.split())
+    # hard_args = "-m c2f "
+    # hard_args += "--dataset-size 10000 --pre-num-epochs 0 --gan-num-epochs 50 --batch-size 8 "
+    # hard_args += "--pre-cp pre_final.pt "
+    # hard_args += "--gan-cp gan_stage_2_epoch_10.pt "
+    # args = parser.parse_args(hard_args.split())
 
     print_args = [f"{a}={getattr(args, a)}" for a in vars(args)]
     print(f"Passed arguments: {', '.join(print_args)}")
@@ -74,9 +74,9 @@ def main():
     print("Getting dataset...")
     train_paths, test_paths = get_image_paths(args.dataset, args.dataset_size, test=args.test_split)
     train_dl = make_dataloader(args.batch_size, args.num_workers,
-                               paths=train_paths, split="train", rng=torch_rng, max_img_size = args.max_img_size)
+                               paths=train_paths, split="train", rng=torch_rng, max_img_size=args.max_img_size)
     val_dl = make_dataloader(args.batch_size, args.num_workers,
-                             paths=test_paths, split="test", max_img_size = args.max_img_size)
+                             paths=test_paths, split="test", max_img_size=args.max_img_size)
     print(" ...done")
 
     # ---------------------------
@@ -89,7 +89,6 @@ def main():
     elif args.agent_mode == "c2f":
         agent = C2FImageGANAgent()
     else:
-        args.agent_mode = "basic"
         agent = ImageGANAgent()
         print(f"INFO: '--agent-mode {args.agent_mode}' is no valid choice. Will fall back to default...")
     print("Chosen agent:", agent.__class__.__name__)
