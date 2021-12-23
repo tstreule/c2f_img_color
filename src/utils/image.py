@@ -145,7 +145,7 @@ class LabImage:
 
 class LabImageBatch:
 
-    def __init__(self, batch: list[LabImage] = None,
+    def __init__(self, batch: list[LabImage] = None, lab: Array = None,
                  L: Array = None, ab: Array = None, pad_mask: Array = None):
         """
         A class capable of efficiently storing batched `LabImage`s.
@@ -161,8 +161,11 @@ class LabImageBatch:
         self._lab_batch = np.ma.array([])  # n_batches x 3 x n x m
         if batch is not None:
             self.from_batch(batch)
-        elif all(x is not None for x in[L, ab, pad_mask]):
-            self.from_L_ab(L, ab, pad_mask)
+        elif pad_mask is not None:
+            if lab is not None:
+                self.from_lab(lab, pad_mask)
+            elif L is not None and ab is not None:
+                self.from_L_ab(L, ab, pad_mask)
 
     def __str__(self):
         cname = self.__class__.__name__
@@ -174,14 +177,20 @@ class LabImageBatch:
         pad_mask = np.broadcast_to(pad_mask, lab_batch.shape).astype("bool")
         self._lab_batch = np.ma.array(lab_batch, mask=pad_mask, fill_value=fill_value)
 
+    def from_lab(self, lab, pad_mask):
+        if isinstance(lab, torch.Tensor):
+            lab = lab.detach().numpy()
+        if isinstance(pad_mask, torch.Tensor):
+            pad_mask = pad_mask.detach().numpy()
+        self._store_lab_batch(lab, pad_mask)
+        return self
+
     def from_L_ab(self, L, ab, pad_mask):
         if all(isinstance(x, torch.Tensor) for x in [L, ab]):
             L = L.detach().numpy()
             ab = ab.detach().numpy()
-        if isinstance(pad_mask, torch.Tensor):
-            pad_mask = pad_mask.detach().numpy()
         lab_batch = np.concatenate([L, ab], axis=1)
-        self._store_lab_batch(lab_batch, pad_mask)
+        self.from_lab(lab_batch, pad_mask)
         return self
 
     def from_batch(self, batch):

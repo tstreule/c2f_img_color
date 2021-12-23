@@ -3,9 +3,8 @@
 import numpy as np
 import torch
 
-from src.agent import ImageGANAgent,ImageGANAgentwFeedback
+from src.agent import ImageGANAgent, C2FImageGANAgent
 from src.utils.data import URLs, get_image_paths, make_dataloader
-from src.utils.image import *
 
 import argparse
 
@@ -55,9 +54,9 @@ def main():
 
     # Uncomment when you want hard-coded parse args
     hard_args = "--dataset-size 32 --pre-num-epochs 1 --gan-num-epochs 1 --batch-size 2 "
-    hard_args += "--cp-dir checkpoints/base/ "
-    #hard_args += "--pre-cp pre_final.pt "
-    #hard_args += "--gan-cp gan_final.pt "
+    hard_args += "--cp-dir checkpoints/c2f/ "
+    # hard_args += "--pre-cp pre_final.pt "
+    # hard_args += "--gan-cp gan_final.pt "
     args = parser.parse_args(hard_args.split())
 
     print_args = [f"{a}={getattr(args, a)}" for a in vars(args)]
@@ -80,7 +79,7 @@ def main():
 
     print("\n=====================")
     print("Initialize agent...")
-    agent = ImageGANAgent()
+    agent = C2FImageGANAgent()
     print(" ...done")
 
     # Set default checkpoint args
@@ -116,14 +115,14 @@ def main():
     print("\n=====================")
     print("Evaluation...")
 
-    # Retrieve trained generator
-    generator = agent.gen_net
-    generator.eval()
+    # # Retrieve trained generator
+    # # -> you can directly call `agent(batch.L)`
+    # generator = agent.gen_net
+    # generator.eval()
 
     # Visualize example batch
     real_imgs = next(iter(val_dl))
-    agent.visualize_example_batch(real_imgs)
-    # pred_imgs[0].visualize(real_imgs[0], show=False, save=True)
+    agent.visualize_example_batch(real_imgs, show=False, save=True)
 
     print(" ...done")
 
