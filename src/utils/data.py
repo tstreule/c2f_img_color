@@ -20,21 +20,21 @@ LabImageDataLoader = DataLoader[LabImageBatch]
 
 class ColorizationDataset(Dataset):
 
-    def __init__(self, paths: ArrayLike, split: Optional[str] = "train"):
+    def __init__(self, paths: ArrayLike, split: Optional[str] = "train", max_img_size=None):
         """
         A PyTorch Dataset for color images.
 
         Args:
             paths: A list containing all image paths.
             split: Determines the type of image transforms that will be applied.
+            max_img_size: Limit image axes length. Mainly used for (significant) speed-up.
         """
 
         assert split in ("train", "test", "val"), f"Invalid option '{split}'"
 
-        transforms = [
-            # Uncomment for significant speed up
-            # T.Resize((256, 256), T.InterpolationMode.BICUBIC),  # ATTENTION: This skews/distorts the images!
-        ]
+        self.max_img_size = max_img_size
+
+        transforms = []
         if split == "train":
             transforms.extend([
                 T.RandomHorizontalFlip(),  # a little data augmentation!
@@ -50,10 +50,21 @@ class ColorizationDataset(Dataset):
     def __getitem__(self, item):
         img = Image.open(self.paths[item]).convert("RGB")
         img = self.transforms(img)
+        img = self._limit_size(img)
         return LabImage(rgb_=img)
 
     def __len__(self):
         return len(self.paths)
+
+    def _limit_size(self, img):
+        if self.max_img_size is not None:
+            sizes = np.array(img.shape, dtype=int)
+            max_sizes = np.round(self.max_img_size / max(sizes) * sizes).astype(int)
+            new_sizes = np.min([sizes, max_sizes], axis=0)
+            resize = T.Resize(tuple(new_sizes))
+            return resize(img)
+        else:
+            return img
 
     @staticmethod
     def collate_fn(batch):
