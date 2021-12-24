@@ -323,6 +323,7 @@ class C2FImageGANAgent(ImageGANAgent):
     # === Generate ===
 
     def __call__(self, L: torch.Tensor) -> torch.Tensor:
-        L = L.to(self._device)
-        pred_imgs = self._c2f_recursive(L)
+        with torch.no_grad():
+            L = L.to(self._device)
+            pred_imgs = self._c2f_recursive(L).to("cpu")
         return pred_imgs
