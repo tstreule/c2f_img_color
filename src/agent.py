@@ -313,11 +313,11 @@ class C2FImageGANAgent(ImageGANAgent):
             # when not training `real_imgs` can also be just a "L"
             prev_pred_imgs = torch.zeros(real_imgs.shape[0], 3, *real_imgs.shape[2:])
         else:
-            resize = T.Resize(tuple(smaller_sizes))
+            resize = T.Resize(tuple(smaller_sizes), T.InterpolationMode.BICUBIC)
             prev_pred_imgs = self._c2f_recursive(resize(real_imgs), opt, rec_depth+1)
 
         # Resizer for scaling up or down
-        resize = T.Resize(tuple(real_sizes))
+        resize = T.Resize(tuple(real_sizes), T.InterpolationMode.BICUBIC)
 
         # Prediction
         L = real_imgs[:, :1].to(self._device)

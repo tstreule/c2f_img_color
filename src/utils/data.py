@@ -61,7 +61,7 @@ class ColorizationDataset(Dataset):
             sizes = np.array(img.shape, dtype=int)
             max_sizes = np.round(self.max_img_size / max(sizes) * sizes).astype(int)
             new_sizes = np.min([sizes, max_sizes], axis=0)
-            resize = T.Resize(tuple(new_sizes))
+            resize = T.Resize(tuple(new_sizes), T.InterpolationMode.BICUBIC)
             return resize(img)
         else:
             return img
