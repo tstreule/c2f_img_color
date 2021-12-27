@@ -10,8 +10,9 @@ from skimage.color import rgb2lab, lab2rgb
 import numpy as np
 import torch
 
-__all__ = ["LabImage", "LabImageBatch"]
+__all__ = ["LabImage", "LabImageBatch", "show_save_image", "load_image"]
 
+OUTPUT_DTYPE = torch.float64
 _IMG_SIZE = 2  # for plt
 Array = Union[list, np.ndarray, torch.Tensor, Image.Image]
 
@@ -27,7 +28,7 @@ class LabImage:
         A Dataset optimized for storing and converting LAB Images.
 
         Args:
-            *args: catches positional arguments (no effect)
+            *: catches positional arguments (no effect)
             rgb_: RGB image array of shape (n, m, 3)
             lab_: LAB image array of shape (n, m, 3)
             lab: LAB image array of shape (3, n, m)
@@ -98,7 +99,7 @@ class LabImage:
     @property
     def lab(self) -> torch.Tensor:
         """shape=(3, n, m)"""
-        return torch.tensor(self._lab)
+        return torch.tensor(self._lab, dtype=OUTPUT_DTYPE)
 
     @property
     def L(self) -> torch.Tensor:
@@ -212,7 +213,7 @@ class LabImageBatch:
     def lab(self) -> torch.Tensor:
         """shape=(batch_size, 3, n, m)"""
         # Masked values are filled with pad_fill_value
-        return torch.tensor(np.ma.filled(self._lab_batch), dtype=torch.float32)
+        return torch.tensor(np.ma.filled(self._lab_batch), dtype=OUTPUT_DTYPE)
 
     @property
     def L(self) -> torch.Tensor:
@@ -273,13 +274,18 @@ class LabImageBatch:
 
 
 def show_save_image(fig, show: bool, save: bool, path=None, fname=None):
-    if show:
-        fig.show()
+
     if save:
         path = Path("imgs") if not path else Path(path)
         path.mkdir(parents=True, exist_ok=True)
         fname = f"{fname.rstrip('_')}_{time.time()}.png"
         fig.savefig(path / fname)
+
+    if show:
+        fig.show()
+    else:
+        plt.close(fig)
+
 
 def load_image(path):
     img = Image.open(path).convert("RGB")

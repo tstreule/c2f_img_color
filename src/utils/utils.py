@@ -15,10 +15,10 @@ __all__ = [
 
 # === PyTorch model utils ===
 
-def get_device(device: Union[str, torch.device] = None):
+def get_device(device: Union[str, torch.device] = None, *args, **kwargs):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-    return torch.device(device)
+    return torch.device(device, *args, **kwargs)
 
 
 def init_weights(model: nn.Module, init="norm", gain=0.02):
