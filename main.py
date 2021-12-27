@@ -13,9 +13,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-m", "--agent-mode", default="basic",
                     help="agent training mode; choice of `basic` or `c2f`")
 # Dataset
-parser.add_argument("--dataset", type=str, default=URLs.COCO_SAMPLE,
+parser.add_argument("--dataset-url", type=str, default=URLs.COCO_SAMPLE,
                     help="link to a `fastai` dataset")
-parser.add_argument("--dataset-size", type=int, default=10_000,
+parser.add_argument("--dataset-size", type=int, default=10000,
                     help="number of images to draw from dataset")
 parser.add_argument("--test-split", type=float, default=0.2,
                     help="percentage of dataset to become train split")
@@ -24,6 +24,8 @@ parser.add_argument("--batch-size", type=int, default=16,
                     help="batch size of data loaders")
 parser.add_argument("--num-workers", type=int, default=4,
                     help="number of workers for data loaders")
+parser.add_argument("--max-img-size", type=int, default=256,
+                    help="maximum size for image loader")
 # Checkpoints
 parser.add_argument("-d", "--cp-dir", type=str, default="checkpoints",
                     help="all model checkpoints land in this directory")
@@ -56,11 +58,11 @@ def main():
     # Argument Parser
 
     # Uncomment when you want hard-coded parse args
-    hard_args = "-m c2f "
-    hard_args += "--dataset-size 32 --pre-num-epochs 1 --gan-num-epochs 1 --batch-size 4 "
+    # hard_args = "-m c2f "
+    # hard_args += "--dataset-size 10000 --pre-num-epochs 0 --gan-num-epochs 50 --batch-size 8 "
     # hard_args += "--pre-cp pre_final.pt "
-    # hard_args += "--gan-cp gan_final.pt "
-    args = parser.parse_args(hard_args.split())
+    # hard_args += "--gan-cp gan_stage_2_epoch_10.pt "
+    # args = parser.parse_args(hard_args.split())
 
     print_args = [f"{a}={getattr(args, a)}" for a in vars(args)]
     print(f"Passed arguments: {', '.join(print_args)}")
@@ -70,11 +72,11 @@ def main():
 
     print("\n=====================")
     print("Getting dataset...")
-    train_paths, test_paths = get_image_paths(args.dataset, args.dataset_size, test=args.test_split)
+    train_paths, test_paths = get_image_paths(args.dataset_url, args.dataset_size, test=args.test_split)
     train_dl = make_dataloader(args.batch_size, args.num_workers,
-                               paths=train_paths, split="train", rng=torch_rng)
+                               paths=train_paths, split="train", rng=torch_rng, max_img_size=args.max_img_size)
     val_dl = make_dataloader(args.batch_size, args.num_workers,
-                             paths=test_paths, split="test")
+                             paths=test_paths, split="test", max_img_size=args.max_img_size)
     print(" ...done")
 
     # ---------------------------

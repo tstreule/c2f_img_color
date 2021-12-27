@@ -1,6 +1,6 @@
 import warnings
 from pathlib import Path
-from tqdm import tqdm
+# from tqdm import tqdm
 import time
 
 import torch
@@ -10,7 +10,7 @@ from kornia.losses import ssim_loss, psnr_loss
 from .discriminator import PatchDiscriminator
 from .generator import build_res_u_net
 from .utils.data import LabImageDataLoader
-from .utils.image import LabImageBatch
+from .utils.image import LabImageBatch, LabImage
 from .utils.utils import *
 
 import torchvision.transforms as T
@@ -25,7 +25,6 @@ def create_loss_meters(pretraining=False) -> LossMeterDict:
     if pretraining:
         loss_names = ["mae_loss"]
     else:
-        # TODO: What about 'SSIM' loss?
         loss_names = ["dis_loss_fake", "dis_loss_real", "dis_loss",
                       "gen_loss_gan", "gen_loss_mae", "gen_loss",
                       "ssim_loss", "psnr_loss"]
@@ -64,12 +63,16 @@ class ImageGANAgent:
                  dis_opt_params: dict = None, gen_lambda_mae=100.0, device=None):
 
         self._device = get_device(device)
+        if torch.cuda.is_available():
+            self._device = get_device(device, 0)  # make cuda:0 the default device to handle parallelism
+            print("Cuda device count:", torch.cuda.device_count())
+            print("Default device:", self._device)
 
         # Create generator and discriminator
         generator = init_weights(build_res_u_net(*gen_net_params)) if gen_net is None else gen_net
         discriminator = init_weights(PatchDiscriminator(*dis_net_params)) if dis_net is None else dis_net
-        self.gen_net = generator.to(self._device)
-        self.dis_net = discriminator.to(self._device)
+        self.gen_net = nn.DataParallel(generator).to(self._device)
+        self.dis_net = nn.DataParallel(discriminator).to(self._device)
 
         # Create model optimizer
         default_params = dict(lr=2e-4, betas=(0.5, 0.999))  # cf. https://arxiv.org/abs/1611.07004 section 3.3
@@ -91,6 +94,7 @@ class ImageGANAgent:
         self._pre_loss_meters = create_loss_meters(pretraining=True)
         self._gan_loss_meters = create_loss_meters()
 
+        self.verbose = True
     # === Training ===
 
     def train(self, train_dl: LabImageDataLoader, val_dl: LabImageDataLoader,
@@ -105,14 +109,17 @@ class ImageGANAgent:
         # Set checkpointing arguments
         checkpoint, cp_after_each, cp_overwrite = set_cp_args(checkpoints)
 
+        # Release all the GPU memory cache that can be freed
+        torch.cuda.empty_cache()
+
         # --- Main training loop ---
         for curr_epoch in range(n_epochs):
             # Skip previous epochs when loaded from checkpoint
             if last_epoch > curr_epoch:
                 continue
 
-            self._run_epoch(optimize, loss_meters, train_dl)
             reset_loss_meters(loss_meters)
+            self._run_epoch(optimize, loss_meters, train_dl)
 
             # Make checkpoint
             last_epoch = curr_epoch + 1  # note that it's not linked to `self` since it's a primitive data type
@@ -120,12 +127,15 @@ class ImageGANAgent:
             if checkpoint and last_epoch % cp_after_each == 0:
                 cp_save_as = checkpoint + f"_epoch_{last_epoch:02d}"
                 self.save_model(cp_save_as, cp_overwrite)
+            if self.verbose:
+                print(f"Epoch {last_epoch}/{n_epochs} Train loss:")
+                log_results(loss_meters)
 
             # Give an update to performance
             if last_epoch % display_every == 0:
                 # Print status
-                print(f"Epoch {last_epoch}/{n_epochs}")
-                log_results(loss_meters)
+                print(f"Epoch {last_epoch}/{n_epochs} Evaluation Loss")
+                self.evaluate(val_dl, loss_meters)
                 # Visualize generated images
                 val_batch = next(iter(val_dl))
                 self.visualize_example_batch(val_batch, show=False, save=True,
@@ -134,7 +144,7 @@ class ImageGANAgent:
         return self
 
     def _run_epoch(self, optimize, loss_meters, train_dl):
-        for i, batch in tqdm(enumerate(train_dl)):
+        for i, batch in enumerate(train_dl):
             # Get real and predict (fake) image batch
             real_imgs = batch.lab.to(self._device)
             fake_imgs = self(real_imgs[:, :1])  # equivalent to batch.L but faster
@@ -144,6 +154,19 @@ class ImageGANAgent:
             # Optimize
             loss_dict = optimize(real_imgs, fake_imgs)
             update_loss_meters(loss_meters, loss_dict, len(batch))
+
+    def evaluate(self, val_dl, loss_meters):
+        reset_loss_meters(loss_meters)
+        for i, batch in enumerate(val_dl):
+            # Get real and predict (fake) image batch
+            real_imgs = batch.lab.to(self._device)
+            fake_imgs = self(real_imgs[:, :1])  # equivalent to batch.L but faster
+            # enforce zero loss at padded values
+            fake_imgs.masked_fill_(batch.pad_mask.to(self._device), batch.pad_fill_value)
+            gen_loss, loss_dict = self._gen_loss(real_imgs, fake_imgs)
+            # update meters
+            update_loss_meters(loss_meters, loss_dict, len(batch))
+        log_results(loss_meters)
 
     def _pre_optimize(self, real_imgs: torch.Tensor, fake_imgs: torch.Tensor) -> dict:
         self.gen_net.train()
@@ -256,7 +279,7 @@ class ImageGANAgent:
 
     def load_model(self, load_from: str):
         save_dict = self._save_dict
-        checkpoint = torch.load(load_from)
+        checkpoint = torch.load(load_from, map_location=self._device)
         for name, attr_name in save_dict["torch"].items():
             getattr(self, attr_name).load_state_dict(checkpoint["torch"][name])
         for name, attr_name in save_dict["other"].items():
@@ -267,7 +290,7 @@ class ImageGANAgent:
 class C2FImageGANAgent(ImageGANAgent):
 
     def __init__(self, *args, gen_net_params=(3, 2, 128), shrink_size=2.0,
-                 min_ax_size=64, max_c2f_depth=5, **kwargs):
+                 min_ax_size=32, max_c2f_depth=5, **kwargs):
         super().__init__(*args, gen_net_params=gen_net_params,  **kwargs)
         # Define shrink size parameter (larger values speed up training and prediction)
         self.shrink_size = shrink_size
@@ -279,7 +302,7 @@ class C2FImageGANAgent(ImageGANAgent):
     # === Training ===
 
     def _run_epoch(self, optimize, loss_meters, train_dl):
-        for i, batch in tqdm(enumerate(train_dl)):
+        for i, batch in enumerate(train_dl):
             # Get real images
             real_imgs = batch.lab.to(self._device)
             # Optimization is done inside recursive loop
@@ -307,6 +330,7 @@ class C2FImageGANAgent(ImageGANAgent):
         pred_input = torch.cat([L, ab], dim=1)
         pred_ab = self.gen_net(pred_input)
         pred_imgs = torch.cat([L, pred_ab], dim=1)
+        del L, ab, pred_input, pred_ab
 
         # Optimize
         if opt is not None:
@@ -326,3 +350,14 @@ class C2FImageGANAgent(ImageGANAgent):
         L = L.to(self._device)
         pred_imgs = self._c2f_recursive(L)
         return pred_imgs
+
+    @torch.no_grad()
+    def colorize_image_batch(self, lab_img: LabImageBatch):
+        pred = self(lab_img.L).to("cpu")
+        return LabImageBatch(lab=pred)
+
+    @torch.no_grad()
+    def colorize_image(self, lab_img: LabImage):
+        batch = LabImageBatch([lab_img])
+        pred = self(batch.L).to("cpu")
+        return LabImage(lab=pred[0])
