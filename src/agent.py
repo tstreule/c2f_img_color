@@ -112,8 +112,8 @@ class ImageGANAgent:
             if last_epoch > curr_epoch:
                 continue
 
+            reset_loss_meters(loss_meters)
             self._run_epoch(optimize, loss_meters, train_dl)
-
 
             # Make checkpoint
             last_epoch = curr_epoch + 1  # note that it's not linked to `self` since it's a primitive data type
@@ -125,8 +125,6 @@ class ImageGANAgent:
                 print(f"Epoch {last_epoch}/{n_epochs} Train loss:")
                 log_results(loss_meters)
 
-            reset_loss_meters(loss_meters)
-
             # Give an update to performance
             if last_epoch % display_every == 0:
                 # Print status
@@ -137,7 +135,6 @@ class ImageGANAgent:
                 val_batch = next(iter(val_dl))
                 self.visualize_example_batch(val_batch, show=False, save=True,
                                              fname=f"{mode}_epoch_{last_epoch}_{time.time()}.png")
-                reset_loss_meters(loss_meters)
 
         return self
 
@@ -152,7 +149,9 @@ class ImageGANAgent:
             # Optimize
             loss_dict = optimize(real_imgs, fake_imgs)
             update_loss_meters(loss_meters, loss_dict, len(batch))
+
     def evaluate(self, val_dl, loss_meters):
+        reset_loss_meters(loss_meters)
         for i, batch in tqdm(enumerate(val_dl)):
             # Get real and predict (fake) image batch
             real_imgs = batch.lab.to(self._device)
@@ -160,7 +159,7 @@ class ImageGANAgent:
             # enforce zero loss at padded values
             fake_imgs.masked_fill_(batch.pad_mask.to(self._device), batch.pad_fill_value)
             gen_loss, loss_dict = self._gen_loss(real_imgs, fake_imgs)
-
+            # update meters
             update_loss_meters(loss_meters, loss_dict, len(batch))
         log_results(loss_meters)
 
