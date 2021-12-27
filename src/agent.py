@@ -362,4 +362,3 @@ class C2FImageGANAgent(ImageGANAgent):
         batch = LabImageBatch([lab_img])
         pred = self(batch.L).to("cpu")
         return LabImage(lab=pred[0])
-
