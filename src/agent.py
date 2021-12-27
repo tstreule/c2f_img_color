@@ -1,6 +1,6 @@
 import warnings
 from pathlib import Path
-from tqdm import tqdm
+# from tqdm import tqdm
 import time
 
 import torch
@@ -25,7 +25,6 @@ def create_loss_meters(pretraining=False) -> LossMeterDict:
     if pretraining:
         loss_names = ["mae_loss"]
     else:
-        # TODO: What about 'SSIM' loss?
         loss_names = ["dis_loss_fake", "dis_loss_real", "dis_loss",
                       "gen_loss_gan", "gen_loss_mae", "gen_loss",
                       "ssim_loss", "psnr_loss"]
@@ -130,7 +129,6 @@ class ImageGANAgent:
                 # Print status
                 print(f"Epoch {last_epoch}/{n_epochs} Evaluation Loss")
                 self.evaluate(val_dl, loss_meters)
-
                 # Visualize generated images
                 val_batch = next(iter(val_dl))
                 self.visualize_example_batch(val_batch, show=False, save=True,
@@ -139,7 +137,7 @@ class ImageGANAgent:
         return self
 
     def _run_epoch(self, optimize, loss_meters, train_dl):
-        for i, batch in tqdm(enumerate(train_dl)):
+        for i, batch in enumerate(train_dl):
             # Get real and predict (fake) image batch
             real_imgs = batch.lab.to(self._device)
             fake_imgs = self(real_imgs[:, :1])  # equivalent to batch.L but faster
@@ -152,7 +150,7 @@ class ImageGANAgent:
 
     def evaluate(self, val_dl, loss_meters):
         reset_loss_meters(loss_meters)
-        for i, batch in tqdm(enumerate(val_dl)):
+        for i, batch in enumerate(val_dl):
             # Get real and predict (fake) image batch
             real_imgs = batch.lab.to(self._device)
             fake_imgs = self(real_imgs[:, :1])  # equivalent to batch.L but faster
@@ -274,7 +272,7 @@ class ImageGANAgent:
 
     def load_model(self, load_from: str):
         save_dict = self._save_dict
-        checkpoint = torch.load(load_from)
+        checkpoint = torch.load(load_from, map_location=self._device)
         for name, attr_name in save_dict["torch"].items():
             getattr(self, attr_name).load_state_dict(checkpoint["torch"][name])
         for name, attr_name in save_dict["other"].items():
@@ -297,7 +295,7 @@ class C2FImageGANAgent(ImageGANAgent):
     # === Training ===
 
     def _run_epoch(self, optimize, loss_meters, train_dl):
-        for i, batch in tqdm(enumerate(train_dl)):
+        for i, batch in enumerate(train_dl):
             # Get real images
             real_imgs = batch.lab.to(self._device)
             # Optimization is done inside recursive loop
@@ -325,6 +323,7 @@ class C2FImageGANAgent(ImageGANAgent):
         pred_input = torch.cat([L, ab], dim=1)
         pred_ab = self.gen_net(pred_input)
         pred_imgs = torch.cat([L, pred_ab], dim=1)
+        del L, ab, pred_input, pred_ab
 
         # Optimize
         if opt is not None:
@@ -345,14 +344,14 @@ class C2FImageGANAgent(ImageGANAgent):
         pred_imgs = self._c2f_recursive(L)
         return pred_imgs
 
+    @torch.no_grad()
     def colorize_image_batch(self, lab_img: LabImageBatch):
-        with torch.no_grad():
-            pred = self(lab_img.L).to("cpu")
-        return LabImageBatch(lab= pred)
+        pred = self(lab_img.L).to("cpu")
+        return LabImageBatch(lab=pred)
 
+    @torch.no_grad()
     def colorize_image(self, lab_img: LabImage):
-        with torch.no_grad():
-            batch = LabImageBatch([lab_img])
-            pred = self(batch.L).to("cpu")
-        return LabImage(lab= pred[0])
+        batch = LabImageBatch([lab_img])
+        pred = self(batch.L).to("cpu")
+        return LabImage(lab=pred[0])
 
