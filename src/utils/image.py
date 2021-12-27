@@ -17,9 +17,6 @@ _IMG_SIZE = 2  # for plt
 Array = Union[list, np.ndarray, torch.Tensor, Image.Image]
 
 
-
-
-
 class LabImage:
 
     def __init__(self, *, rgb_: Array = None, lab_: Array = None,
@@ -87,7 +84,7 @@ class LabImage:
         self._store_lab(lab)
         return self
 
-    def save(self,fname):
+    def save(self, fname):
         Image.fromarray(np.asarray((self.rgb_ * 255)).astype(np.uint8)).save(fname)
 
     # === Data Getter ===

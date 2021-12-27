@@ -59,7 +59,7 @@ def main():
 
     # Uncomment when you want hard-coded parse args
     # hard_args = "-m c2f "
-    # hard_args += "--dataset-size 32 --pre-num-epochs 1 --gan-num-epochs 1 --batch-size 2 "
+    # hard_args += "--dataset-size 10000 --pre-num-epochs 1 --gan-num-epochs 1 --batch-size 2 "
     # hard_args += "--cp-dir checkpoints/c2f/ "
     # hard_args += "--pre-cp pre_final.pt "
     # hard_args += "--gan-cp gan_final.pt "

@@ -128,14 +128,12 @@ class WelfordMeter:
         self._sub_buff_counter = 0
 
     def update(self, val, count=1):
-
         delta1 = val - self._M
         self._M += count * delta1 / self.counter
         delta2 = val - self._M
         self._S += count * delta1 * delta2
 
         self._update_buffer(val)
-
         self.counter += count
 
     def _update_buffer(self, val):

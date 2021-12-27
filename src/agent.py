@@ -355,11 +355,10 @@ class C2FImageGANAgent(ImageGANAgent):
     def colorize_image_batch(self, lab_img: LabImageBatch):
         with torch.no_grad():
             pred = self(lab_img.L).to("cpu")
-        return LabImageBatch(lab= pred)
+        return LabImageBatch(lab=pred)
 
     def colorize_image(self, lab_img: LabImage):
         with torch.no_grad():
             batch = LabImageBatch([lab_img])
             pred = self(batch.L).to("cpu")
-        return LabImage(lab= pred[0])
-
+        return LabImage(lab=pred[0])
