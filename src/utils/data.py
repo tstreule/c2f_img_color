@@ -20,7 +20,7 @@ LabImageDataLoader = DataLoader[LabImageBatch]
 
 class ColorizationDataset(Dataset):
 
-    def __init__(self, paths: ArrayLike, split: Optional[str] = "train", max_img_size=None):
+    def __init__(self, paths: ArrayLike, split: Optional[str] = "train", max_img_size=512):
         """
         A PyTorch Dataset for color images.
 

@@ -1,6 +1,6 @@
 import warnings
 from pathlib import Path
-from tqdm import tqdm
+# from tqdm import tqdm
 import time
 
 import torch
@@ -25,7 +25,6 @@ def create_loss_meters(pretraining=False) -> LossMeterDict:
     if pretraining:
         loss_names = ["mae_loss"]
     else:
-        # TODO: What about 'SSIM' loss?
         loss_names = ["dis_loss_fake", "dis_loss_real", "dis_loss",
                       "gen_loss_gan", "gen_loss_mae", "gen_loss",
                       "ssim_loss", "psnr_loss"]
@@ -111,8 +110,8 @@ class ImageGANAgent:
             if last_epoch > curr_epoch:
                 continue
 
-            self._run_epoch(optimize, loss_meters, train_dl)
             reset_loss_meters(loss_meters)
+            self._run_epoch(optimize, loss_meters, train_dl)
 
             # Make checkpoint
             last_epoch = curr_epoch + 1  # note that it's not linked to `self` since it's a primitive data type
@@ -124,7 +123,7 @@ class ImageGANAgent:
             # Give an update to performance
             if last_epoch % display_every == 0:
                 # Print status
-                print(f"Epoch {last_epoch}/{n_epochs}")
+                print(f"Epoch {last_epoch}/{n_epochs}", "\t[ time:", time.strftime("%H:%M:%S"), "]")
                 log_results(loss_meters)
                 # Visualize generated images
                 val_batch = next(iter(val_dl))
@@ -134,7 +133,7 @@ class ImageGANAgent:
         return self
 
     def _run_epoch(self, optimize, loss_meters, train_dl):
-        for i, batch in tqdm(enumerate(train_dl)):
+        for i, batch in enumerate(train_dl):
             # Get real and predict (fake) image batch
             real_imgs = batch.lab.to(self._device)
             fake_imgs = self(real_imgs[:, :1])  # equivalent to batch.L but faster
@@ -256,7 +255,7 @@ class ImageGANAgent:
 
     def load_model(self, load_from: str):
         save_dict = self._save_dict
-        checkpoint = torch.load(load_from)
+        checkpoint = torch.load(load_from, map_location=self._device)
         for name, attr_name in save_dict["torch"].items():
             getattr(self, attr_name).load_state_dict(checkpoint["torch"][name])
         for name, attr_name in save_dict["other"].items():
@@ -279,7 +278,7 @@ class C2FImageGANAgent(ImageGANAgent):
     # === Training ===
 
     def _run_epoch(self, optimize, loss_meters, train_dl):
-        for i, batch in tqdm(enumerate(train_dl)):
+        for i, batch in enumerate(train_dl):
             # Get real images
             real_imgs = batch.lab.to(self._device)
             # Optimization is done inside recursive loop
@@ -307,6 +306,7 @@ class C2FImageGANAgent(ImageGANAgent):
         pred_input = torch.cat([L, ab], dim=1)
         pred_ab = self.gen_net(pred_input)
         pred_imgs = torch.cat([L, pred_ab], dim=1)
+        del L, ab, pred_input, pred_ab
 
         # Optimize
         if opt is not None:
