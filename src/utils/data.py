@@ -77,9 +77,9 @@ class ColorizationDataset(Dataset):
             return default_collate(batch)
 
 
-def make_dataloader(batch_size=16, n_workers=4, pin_memory=True, rng=None,
+def make_dataloader(batch_size=16, n_workers=4, pin_memory=True, rng=None, max_img_size=None,
                     **kwargs) -> LabImageDataLoader:
-    dataset = ColorizationDataset(**kwargs)
+    dataset = ColorizationDataset(max_img_size=max_img_size, **kwargs)
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=n_workers,
                             collate_fn=dataset.collate_fn, pin_memory=pin_memory,
                             generator=rng, shuffle=bool(rng))

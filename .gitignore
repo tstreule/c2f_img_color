@@ -8,3 +8,7 @@ __pycache__/
 
 # Temporary stuff
 *test*
+
+# Project files
+imgs/
+checkpoints/

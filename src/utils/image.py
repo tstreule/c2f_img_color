@@ -10,7 +10,7 @@ from skimage.color import rgb2lab, lab2rgb
 import numpy as np
 import torch
 
-__all__ = ["LabImage", "LabImageBatch"]
+__all__ = ["LabImage", "LabImageBatch", "show_save_image", "load_image"]
 
 OUTPUT_DTYPE = torch.float64
 _IMG_SIZE = 2  # for plt
@@ -83,6 +83,9 @@ class LabImage:
             lab = np.array(lab)
         self._store_lab(lab)
         return self
+
+    def save(self, fname):
+        Image.fromarray(np.asarray((self.rgb_ * 255)).astype(np.uint8)).save(fname)
 
     # === Data Getter ===
 
@@ -279,3 +282,8 @@ def show_save_image(fig, show: bool, save: bool, path=None, fname=None):
         fig.show()
     else:
         plt.close(fig)
+
+
+def load_image(path):
+    img = Image.open(path).convert("RGB")
+    return LabImage(rgb_=img)
