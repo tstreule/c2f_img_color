@@ -3,7 +3,7 @@ import warnings
 from pathlib import Path
 from typing import Union
 
-from PIL.Image import Image
+from PIL import Image
 import matplotlib.pyplot as plt
 from skimage.color import rgb2lab, lab2rgb
 
@@ -14,7 +14,7 @@ __all__ = ["LabImage", "LabImageBatch", "show_save_image", "load_image"]
 
 OUTPUT_DTYPE = torch.float64
 _IMG_SIZE = 2  # for plt
-Array = Union[list, np.ndarray, torch.Tensor, Image]
+Array = Union[list, np.ndarray, torch.Tensor, Image.Image]
 
 
 class LabImage:
