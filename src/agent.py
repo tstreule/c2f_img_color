@@ -136,7 +136,6 @@ class ImageGANAgent:
                 # Print status
                 print(f"Epoch {last_epoch}/{n_epochs} Evaluation Loss")
                 self.evaluate(val_dl, loss_meters)
-
                 # Visualize generated images
                 val_batch = next(iter(val_dl))
                 self.visualize_example_batch(val_batch, show=False, save=True,

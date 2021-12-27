@@ -59,10 +59,9 @@ def main():
 
     # Uncomment when you want hard-coded parse args
     # hard_args = "-m c2f "
-    # hard_args += "--dataset-size 10000 --pre-num-epochs 1 --gan-num-epochs 1 --batch-size 2 "
-    # hard_args += "--cp-dir checkpoints/c2f/ "
+    # hard_args += "--dataset-size 10000 --pre-num-epochs 0 --gan-num-epochs 50 --batch-size 8 "
     # hard_args += "--pre-cp pre_final.pt "
-    # hard_args += "--gan-cp gan_final.pt "
+    # hard_args += "--gan-cp gan_stage_2_epoch_10.pt "
     # args = parser.parse_args(hard_args.split())
 
     print_args = [f"{a}={getattr(args, a)}" for a in vars(args)]
