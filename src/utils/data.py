@@ -20,7 +20,7 @@ LabImageDataLoader = DataLoader[LabImageBatch]
 
 class ColorizationDataset(Dataset):
 
-    def __init__(self, paths: ArrayLike, split: Optional[str] = "train", max_img_size=None):
+    def __init__(self, paths: ArrayLike, split: Optional[str] = "train", max_img_size=512):
         """
         A PyTorch Dataset for color images.
 
@@ -61,7 +61,7 @@ class ColorizationDataset(Dataset):
             sizes = np.array(img.shape, dtype=int)
             max_sizes = np.round(self.max_img_size / max(sizes) * sizes).astype(int)
             new_sizes = np.min([sizes, max_sizes], axis=0)
-            resize = T.Resize(tuple(new_sizes))
+            resize = T.Resize(tuple(new_sizes), T.InterpolationMode.BICUBIC)
             return resize(img)
         else:
             return img
@@ -77,9 +77,9 @@ class ColorizationDataset(Dataset):
             return default_collate(batch)
 
 
-def make_dataloader(batch_size=16, n_workers=4, pin_memory=True, rng=None, max_img_size = None,
+def make_dataloader(batch_size=16, n_workers=4, pin_memory=True, rng=None, max_img_size=None,
                     **kwargs) -> LabImageDataLoader:
-    dataset = ColorizationDataset(max_img_size = max_img_size,**kwargs)
+    dataset = ColorizationDataset(max_img_size=max_img_size, **kwargs)
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=n_workers,
                             collate_fn=dataset.collate_fn, pin_memory=pin_memory,
                             generator=rng, shuffle=bool(rng))
