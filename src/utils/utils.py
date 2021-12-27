@@ -105,7 +105,7 @@ class WelfordMeter:
     """
 
     def __init__(self):
-        self.counter = 0
+        self.counter = 1
         self._M = 0
         self._S = 0
         self._main_buffer: list[np.ndarray] = []
@@ -115,7 +115,7 @@ class WelfordMeter:
 
     def reset(self):
         # Keep buffer as is but reset running averages and stds
-        self.counter = 0
+        self.counter = 1
         self._M = 0
         self._S = 0
         # Add previous sub buffer (if exists) to main buffer
@@ -128,7 +128,6 @@ class WelfordMeter:
         self._sub_buff_counter = 0
 
     def update(self, val, count=1):
-        self.counter += count
 
         delta1 = val - self._M
         self._M += count * delta1 / self.counter
@@ -136,6 +135,8 @@ class WelfordMeter:
         self._S += count * delta1 * delta2
 
         self._update_buffer(val)
+
+        self.counter += count
 
     def _update_buffer(self, val):
         # Double buffer size if necessary
