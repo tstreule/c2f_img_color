@@ -13,9 +13,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-m", "--agent-mode", default="basic",
                     help="agent training mode; choice of `basic` or `c2f`")
 # Dataset
-parser.add_argument("--dataset", type=str, default=URLs.COCO_SAMPLE,
+parser.add_argument("--dataset-url", type=str, default=URLs.COCO_SAMPLE,
                     help="link to a `fastai` dataset")
-parser.add_argument("--dataset-size", type=int, default=10_000,
+parser.add_argument("--dataset-size", type=int, default=10000,
                     help="number of images to draw from dataset")
 parser.add_argument("--test-split", type=float, default=0.2,
                     help="percentage of dataset to become train split")
@@ -73,7 +73,7 @@ def main():
 
     print("\n=====================")
     print("Getting dataset...")
-    train_paths, test_paths = get_image_paths(args.dataset, args.dataset_size, test=args.test_split)
+    train_paths, test_paths = get_image_paths(args.dataset_url, args.dataset_size, test=args.test_split)
     train_dl = make_dataloader(args.batch_size, args.num_workers,
                                paths=train_paths, split="train", rng=torch_rng, max_img_size=args.max_img_size)
     val_dl = make_dataloader(args.batch_size, args.num_workers,
@@ -90,6 +90,7 @@ def main():
     elif args.agent_mode == "c2f":
         agent = C2FImageGANAgent()
     else:
+        args.agent_mode = "basic"
         agent = ImageGANAgent()
         print(f"INFO: '--agent-mode {args.agent_mode}' is no valid choice. Will fall back to default...")
     print("Chosen agent:", agent.__class__.__name__)
