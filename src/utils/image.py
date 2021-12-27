@@ -16,6 +16,9 @@ _IMG_SIZE = 2  # for plt
 Array = Union[list, np.ndarray, torch.Tensor, Image.Image]
 
 
+
+
+
 class LabImage:
 
     def __init__(self, *, rgb_: Array = None, lab_: Array = None,
@@ -277,3 +280,7 @@ def show_save_image(fig, show: bool, save: bool, path=None, fname=None):
         path.mkdir(parents=True, exist_ok=True)
         fname = f"{fname.rstrip('_')}_{time.time()}.png"
         fig.savefig(path / fname)
+
+def load_image(path):
+    img = Image.open(path).convert("RGB")
+    return LabImage(rgb_=img)
