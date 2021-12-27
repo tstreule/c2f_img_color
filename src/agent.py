@@ -91,6 +91,7 @@ class ImageGANAgent:
         self._pre_loss_meters = create_loss_meters(pretraining=True)
         self._gan_loss_meters = create_loss_meters()
 
+        self.verbose = True
     # === Training ===
 
     def train(self, train_dl: LabImageDataLoader, val_dl: LabImageDataLoader,
@@ -112,7 +113,7 @@ class ImageGANAgent:
                 continue
 
             self._run_epoch(optimize, loss_meters, train_dl)
-            reset_loss_meters(loss_meters)
+
 
             # Make checkpoint
             last_epoch = curr_epoch + 1  # note that it's not linked to `self` since it's a primitive data type
@@ -120,16 +121,23 @@ class ImageGANAgent:
             if checkpoint and last_epoch % cp_after_each == 0:
                 cp_save_as = checkpoint + f"_epoch_{last_epoch:02d}"
                 self.save_model(cp_save_as, cp_overwrite)
+            if self.verbose:
+                print(f"Epoch {last_epoch}/{n_epochs} Train loss:")
+                log_results(loss_meters)
+
+            reset_loss_meters(loss_meters)
 
             # Give an update to performance
             if last_epoch % display_every == 0:
                 # Print status
-                print(f"Epoch {last_epoch}/{n_epochs}")
-                log_results(loss_meters)
+                print(f"Epoch {last_epoch}/{n_epochs} Evaluation Loss")
+                self.evaluate(val_dl, loss_meters)
+
                 # Visualize generated images
                 val_batch = next(iter(val_dl))
                 self.visualize_example_batch(val_batch, show=False, save=True,
                                              fname=f"{mode}_epoch_{last_epoch}_{time.time()}.png")
+                reset_loss_meters(loss_meters)
 
         return self
 
@@ -144,6 +152,17 @@ class ImageGANAgent:
             # Optimize
             loss_dict = optimize(real_imgs, fake_imgs)
             update_loss_meters(loss_meters, loss_dict, len(batch))
+    def evaluate(self, val_dl, loss_meters):
+        for i, batch in tqdm(enumerate(val_dl)):
+            # Get real and predict (fake) image batch
+            real_imgs = batch.lab.to(self._device)
+            fake_imgs = self(real_imgs[:, :1])  # equivalent to batch.L but faster
+            # enforce zero loss at padded values
+            fake_imgs.masked_fill_(batch.pad_mask.to(self._device), batch.pad_fill_value)
+            gen_loss, loss_dict = self._gen_loss(real_imgs, fake_imgs)
+
+            update_loss_meters(loss_meters, loss_dict, len(batch))
+        log_results(loss_meters)
 
     def _pre_optimize(self, real_imgs: torch.Tensor, fake_imgs: torch.Tensor) -> dict:
         self.gen_net.train()
@@ -267,7 +286,7 @@ class ImageGANAgent:
 class C2FImageGANAgent(ImageGANAgent):
 
     def __init__(self, *args, gen_net_params=(3, 2, 128), shrink_size=2.0,
-                 min_ax_size=64, max_c2f_depth=5, **kwargs):
+                 min_ax_size=32, max_c2f_depth=5, **kwargs):
         super().__init__(*args, gen_net_params=gen_net_params,  **kwargs)
         # Define shrink size parameter (larger values speed up training and prediction)
         self.shrink_size = shrink_size
@@ -323,17 +342,18 @@ class C2FImageGANAgent(ImageGANAgent):
     # === Generate ===
 
     def __call__(self, L: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad():
-            L = L.to(self._device)
-            pred_imgs = self._c2f_recursive(L).to("cpu")
+        L = L.to(self._device)
+        pred_imgs = self._c2f_recursive(L)
         return pred_imgs
 
     def colorize_image_batch(self, lab_img: LabImageBatch):
-        pred = self(lab_img.L)
+        with torch.no_grad():
+            pred = self(lab_img.L).to("cpu")
         return LabImageBatch(lab= pred)
 
     def colorize_image(self, lab_img: LabImage):
-        batch = LabImageBatch([lab_img])
-        pred = self(batch.L)
+        with torch.no_grad():
+            batch = LabImageBatch([lab_img])
+            pred = self(batch.L).to("cpu")
         return LabImage(lab= pred[0])
 
