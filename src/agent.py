@@ -10,7 +10,7 @@ from kornia.losses import ssim_loss, psnr_loss
 from .discriminator import PatchDiscriminator
 from .generator import build_res_u_net
 from .utils.data import LabImageDataLoader
-from .utils.image import LabImageBatch
+from .utils.image import LabImageBatch, LabImage
 from .utils.utils import *
 
 import torchvision.transforms as T
@@ -327,3 +327,13 @@ class C2FImageGANAgent(ImageGANAgent):
             L = L.to(self._device)
             pred_imgs = self._c2f_recursive(L).to("cpu")
         return pred_imgs
+
+    def colorize_image_batch(self, lab_img: LabImageBatch):
+        pred = self(lab_img.L)
+        return LabImageBatch(lab= pred)
+
+    def colorize_image(self, lab_img: LabImage):
+        batch = LabImageBatch([lab_img])
+        pred = self(batch.L)
+        return LabImage(lab= pred[0])
+
