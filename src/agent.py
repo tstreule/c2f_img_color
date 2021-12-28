@@ -64,16 +64,12 @@ class ImageGANAgent:
                  dis_opt_params: dict = None, gen_lambda_mae=100.0, device=None):
 
         self._device = get_device(device)
-        if torch.cuda.is_available():
-            self._device = get_device(device, 0)  # make cuda:0 the default device to handle parallelism
-            print("Cuda device count:", torch.cuda.device_count())
-            print("Default device:", self._device)
 
         # Create generator and discriminator
         generator = init_weights(build_res_u_net(*gen_net_params)) if gen_net is None else gen_net
         discriminator = init_weights(PatchDiscriminator(*dis_net_params)) if dis_net is None else dis_net
-        self.gen_net = nn.DataParallel(generator).to(self._device)
-        self.dis_net = nn.DataParallel(discriminator).to(self._device)
+        self.gen_net = generator.to(self._device)
+        self.dis_net = discriminator.to(self._device)
 
         # Create model optimizer
         default_params = dict(lr=2e-4, betas=(0.5, 0.999))  # cf. https://arxiv.org/abs/1611.07004 section 3.3
