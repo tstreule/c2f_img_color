@@ -18,6 +18,7 @@ import torchvision.transforms as T
 
 # === Loss Meters ===
 
+LossDict = dict[str, torch.Tensor]
 LossMeterDict = dict[str, WelfordMeter]
 
 
@@ -37,7 +38,7 @@ def reset_loss_meters(loss_meters: LossMeterDict):
         meter.reset()
 
 
-def update_loss_meters(loss_meters: LossMeterDict, update_dict: dict[str, float], count=1):
+def update_loss_meters(loss_meters: LossMeterDict, update_dict: LossDict, count=1):
     update_dict = {name: float(value)  # detach tensor properties through float(...)
                    for name, value in update_dict.items()}
     for loss_name in update_dict:
@@ -63,16 +64,12 @@ class ImageGANAgent:
                  dis_opt_params: dict = None, gen_lambda_mae=100.0, device=None):
 
         self._device = get_device(device)
-        if torch.cuda.is_available():
-            self._device = get_device(device, 0)  # make cuda:0 the default device to handle parallelism
-            print("Cuda device count:", torch.cuda.device_count())
-            print("Default device:", self._device)
 
         # Create generator and discriminator
         generator = init_weights(build_res_u_net(*gen_net_params)) if gen_net is None else gen_net
         discriminator = init_weights(PatchDiscriminator(*dis_net_params)) if dis_net is None else dis_net
-        self.gen_net = nn.DataParallel(generator).to(self._device)
-        self.dis_net = nn.DataParallel(discriminator).to(self._device)
+        self.gen_net = generator.to(self._device)
+        self.dis_net = discriminator.to(self._device)
 
         # Create model optimizer
         default_params = dict(lr=2e-4, betas=(0.5, 0.999))  # cf. https://arxiv.org/abs/1611.07004 section 3.3
@@ -202,7 +199,7 @@ class ImageGANAgent:
         return loss_dict
 
     def _dis_loss(self, real_imgs: torch.Tensor, fake_imgs: torch.Tensor) \
-            -> tuple[torch.Tensor, LossMeterDict]:
+            -> tuple[torch.Tensor, LossDict]:
         real_preds = self.dis_net(real_imgs)
         fake_preds = self.dis_net(fake_imgs.detach())
         real_loss = self._gan_crit(real_preds, True)
@@ -213,7 +210,7 @@ class ImageGANAgent:
         return dis_loss, loss_dict
 
     def _gen_loss(self, real_imgs: torch.Tensor, fake_imgs: torch.Tensor) \
-            -> tuple[torch.Tensor, LossMeterDict]:
+            -> tuple[torch.Tensor, LossDict]:
         fake_preds = self.dis_net(fake_imgs)
         gan_loss = self._gan_crit(fake_preds, False)
         mae_loss = self._mae_crit(real_imgs[:, 1:], fake_imgs[:, 1:])  # use `ab` part only
