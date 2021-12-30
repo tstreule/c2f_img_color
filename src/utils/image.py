@@ -12,7 +12,7 @@ import torch
 
 __all__ = ["LabImage", "LabImageBatch", "show_save_image", "load_image"]
 
-OUTPUT_DTYPE = torch.float64
+OUTPUT_DTYPE = torch.float32
 _IMG_SIZE = 2  # for plt
 Array = Union[list, np.ndarray, torch.Tensor, Image.Image]
 
@@ -47,13 +47,14 @@ class LabImage:
 
     # === Data Setter ===
 
-    def _store_lab(self, lab: np.ndarray, clip=True, tol=0.0):
+    def _store_lab(self, lab: np.ndarray, clip=True, tol=0.1):
         is_valid = np.greater_equal(lab, - 1.0 - tol) & np.less_equal(lab, + 1.0 + tol)
         num_violations = lab.size - is_valid.sum()
         if num_violations > 0:
             warnings.warn(
                 f"Data appears to be non-normalized. {num_violations} / {lab.size} "
-                f"values are out of the tolerance area: |x| <= 1.0 + {tol}.")
+                f"values are out of the tolerance area: |x| <= 1.0 + {tol}. "
+                f"Found values in the range ({np.min(lab)}, {np.max(lab)}).")
         if clip:
             self._lab = np.clip(lab, -1., 1.)
         else:
@@ -170,7 +171,7 @@ class LabImageBatch:
 
     # === Data Setter ===
 
-    def _store_lab_batch(self, lab_batch, pad_mask, fill_value=-1.0):
+    def _store_lab_batch(self, lab_batch, pad_mask, fill_value=0.0):
         pad_mask = np.broadcast_to(pad_mask, lab_batch.shape).astype("bool")
         self._lab_batch = np.ma.array(lab_batch, mask=pad_mask, fill_value=fill_value)
 

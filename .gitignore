@@ -11,4 +11,4 @@ __pycache__/
 
 # Project files
 imgs/
-checkpoints/
+lightning_logs/

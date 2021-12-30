@@ -62,7 +62,7 @@ class GANLoss(nn.Module):
     def get_labels(self, preds, target_is_real_img):
         labels = self.real_label if target_is_real_img \
             else self.fake_label
-        return labels.expand_as(preds)
+        return labels.type_as(preds).expand_as(preds)
 
     def __call__(self, preds, target_is_real_img):
         labels = self.get_labels(preds, target_is_real_img)
