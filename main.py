@@ -21,7 +21,7 @@ torch.manual_seed(923845902387)
 
 
 def model_cls(model: str) -> Type[BaseModule]:
-    if model in ("pretrain", "pre"):
+    if model == "pretrain":
         return PreTrainer
     elif model == "base":
         return ImageGAN
@@ -62,12 +62,28 @@ def make_parser(hard_args=None) -> ArgumentParser:
     return parser
 
 
-def main(args):
+def adjust_args(args):
+
+    # Add callbacks
+    args.callbacks = get_callbacks_for_given_model(args)
 
     # Modify batch_size according to how pytorch-lightning scales it
     if args.gpus is not None:
-        num_gpus = len(args.gpus) if isinstance(args.gpus, (tuple, list)) else int(args.gpus)
+        if args.gpus == -1:
+            num_gpus = torch.cuda.device_count()
+        elif isinstance(args.gpus, str):
+            num_gpus = len(args.gpus.split(","))
+        elif isinstance(args.gpus, (tuple, list)):
+            num_gpus = len(args.gpus)
+        else:
+            raise NotImplementedError
         args.batch_size = int(args.batch_size / num_gpus)
+
+    return args
+
+
+def main(args):
+    args = adjust_args(args)
 
     # Setup
     dm = ColorizationDataModule.from_argparse_args(args)

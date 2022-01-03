@@ -70,24 +70,26 @@ class BaseModule(LightningModule, ABC):
 
     def validation_step(self, batch, batch_idx):
         imgs, fake_imgs = self.get_real_n_fake_imgs(batch)
-        self.val_test_logging(imgs, fake_imgs, batch_idx, "val")
+        self.log_losses(imgs, fake_imgs, batch_idx, "val")
+        self.log_sample_images(imgs, fake_imgs, batch_idx=batch_idx)
 
-    def test_step(self, batch, batch_idx, n_samples=8):
+    def test_step(self, batch, batch_idx):
         imgs, fake_imgs = self.get_real_n_fake_imgs(batch)
-        self.val_test_logging(imgs, fake_imgs, batch_idx, "test")
+        self.log_losses(imgs, fake_imgs, batch_idx, "test")
+        self.log_sample_images(imgs, fake_imgs, batch_idx=batch_idx)
 
     @abstractmethod
-    def val_test_logging(self, real_imgs, fake_imgs, batch_idx, step=""):
+    def log_losses(self, real_imgs, fake_imgs, batch_idx, step=""):
         pass
 
-    @staticmethod
-    def make_rgb_grid(*imgs, n=8):
-        sample_imgs = torch.cat([*imgs], dim=0)[:, :n]
-        sample_grid = make_grid(sample_imgs, nrow=imgs[0].shape[0])
-        # Transform color to rgb
-        rgb = LabImage(lab=sample_grid).rgb_.transpose((2, 0, 1))
-        img_tensor = torch.tensor(rgb).type_as(imgs[0])
-        return img_tensor
+    def log_sample_images(self, *imgs: torch.Tensor, batch_idx: int, max_n_imgs: int = 8):
+        if batch_idx <= 4:
+            sample_imgs = torch.cat([*imgs], dim=0)[:, :max_n_imgs]
+            sample_grid = make_grid(sample_imgs, nrow=imgs[0].shape[0])
+            # Transform color to rgb
+            rgb = LabImage(lab=sample_grid.cpu()).rgb_.transpose((2, 0, 1))
+            img_tensor = torch.tensor(rgb).type_as(imgs[0])
+            self.logger.experiment.add_image("generated_images", img_tensor, self.current_epoch)
 
 
 class PreTrainer(BaseModule):
@@ -133,7 +135,7 @@ class PreTrainer(BaseModule):
 
     # === Validation and testing ===
 
-    def val_test_logging(self, real_imgs, fake_imgs, batch_idx, step=""):
+    def log_losses(self, real_imgs, fake_imgs, batch_idx, step=""):
         # Get losses
         loss = self.mae_criterion(real_imgs[:, 1:], fake_imgs[:, 1:])  # use `ab` part only
         ssim = ssim_loss(real_imgs, fake_imgs, 5)
@@ -142,11 +144,6 @@ class PreTrainer(BaseModule):
         log_dict = {"mae_loss": loss, "ssim_loss": ssim, "psnr_loss": psnr}
         log_dict = {f"{step}_{name}": value for name, value in log_dict.items()}
         self.log_dict(log_dict, batch_size=len(real_imgs), sync_dist=True)
-        # Log sample images
-        if batch_idx <= 1:
-            grid = self.make_rgb_grid(real_imgs, fake_imgs)
-            self.logger.experiment.add_image("generated_images", grid, self.current_epoch)
-        return log_dict
 
 
 class ImageGAN(BaseModule):
@@ -232,7 +229,7 @@ class ImageGAN(BaseModule):
 
     # === Validation and testing ===
 
-    def val_test_logging(self, real_imgs, fake_imgs, batch_idx, step=""):
+    def log_losses(self, real_imgs, fake_imgs, batch_idx, step=""):
         # Get losses
         gan_loss = self.gan_criterion(self.D_net(fake_imgs), False)
         mae_loss = self.mae_criterion(real_imgs[:, 1:], fake_imgs[:, 1:])  # use `ab` part only
@@ -244,11 +241,6 @@ class ImageGAN(BaseModule):
                     "ssim_loss": ssim, "psnr_loss": psnr}
         log_dict = {f"{step}_{name}": value for name, value in log_dict.items()}
         self.log_dict(log_dict, batch_size=len(real_imgs), sync_dist=True)
-        # Log sample images
-        if batch_idx <= 1:
-            grid = self.make_rgb_grid(real_imgs, fake_imgs)
-            self.logger.experiment.add_image("generated_images", grid, self.current_epoch)
-        return log_dict
 
 
 class C2FImageGAN(ImageGAN):
@@ -276,7 +268,7 @@ class C2FImageGAN(ImageGAN):
 
     # === Forward ===
 
-    def forward(self, batch, rec_depth=0):
+    def forward(self, batch, *, rec_depth=0):
         real_imgs, (pad_mask, pad_fill_value) = batch
 
         real_sizes = real_imgs.shape[2:]
@@ -290,7 +282,7 @@ class C2FImageGAN(ImageGAN):
         else:
             resize = T.Resize(tuple(smaller_sizes), T.InterpolationMode.BICUBIC)
             resized_batch = resize(real_imgs), (resize(pad_mask), pad_fill_value)
-            prev_pred_imgs = self(resized_batch, rec_depth+1)
+            prev_pred_imgs = self(resized_batch, rec_depth=rec_depth+1)
             del resized_batch
 
         # Resizer for scaling up or down
