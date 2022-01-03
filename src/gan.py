@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from collections import OrderedDict
 from argparse import ArgumentParser
+from collections import OrderedDict
 
 import torch
 from torch import nn
@@ -40,10 +40,7 @@ class BaseModule(LightningModule, ABC):
 
     @staticmethod
     def gan_criterion(imgs: torch.Tensor, pred_imgs):
-        if hasattr(imgs, "get_device"):
-            device = imgs.get_device()
-        else:
-            device = "cpu"
+        device = imgs.get_device() if imgs.is_cuda else "cpu"
         criterion = GANLoss("vanilla").to(device)
         return criterion(imgs, pred_imgs)
 
@@ -163,7 +160,7 @@ class ImageGAN(BaseModule):
         self.save_hyperparameters(ignore=[*kwargs.keys()])
         # Set/create generator and discriminator
         pretrained = PreTrainer.load_from_checkpoint(pretrained_ckpt_path)
-        assert gen_net_params == pretrained.hparams.gen_net_params, (
+        assert (*gen_net_params,) == (*pretrained.hparams.gen_net_params,), (
             f"expected gen_net_params={pretrained.hparams.gen_net_params} "
             f"but found {gen_net_params} instead.")
         self.G_net = pretrained.G_net
@@ -253,7 +250,7 @@ class C2FImageGAN(ImageGAN):
             **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.save_hyperparameters()
+        self.save_hyperparameters(*args, shrink_size, min_ax_size, max_c2f_depth)
 
     @classmethod
     def add_model_specific_args(cls, parent_parser: ArgumentParser, *args):
