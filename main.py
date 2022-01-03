@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from pytorch_lightning import Trainer
 from src.gan import BaseModule, PreTrainer, ImageGAN, C2FImageGAN
+from src.utils.callbacks import get_callbacks_for_given_model
 from src.utils.data import URLs, ColorizationDataModule
 
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
