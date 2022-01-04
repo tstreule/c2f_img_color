@@ -11,14 +11,24 @@ from kornia.losses import ssim_loss, psnr_loss
 from .discriminator import PatchDiscriminator
 from .generator import build_res_u_net
 from .utils.data import ColorizationBatch
-from .utils.image import LabImage
+from .utils.image import LabImage, LabImageBatch
 from .utils.utils import *
 
 import torchvision.transforms as T
 
-__all__ = ["BaseModule", "PreTrainer", "ImageGAN", "C2FImageGAN"]
+__all__ = ["predict_and_visualize", "BaseModule", "PreTrainer", "ImageGAN", "C2FImageGAN"]
 
 # TODO: handle learning rate according to batch size
+
+
+def predict_and_visualize(model: "BaseModule", batch: ColorizationBatch, **kwargs):
+    # Predict images
+    reals, preds = model.get_real_n_fake_imgs(batch)
+    # Visualize
+    _, (pad_mask, _) = batch
+    reals = LabImageBatch(lab=reals, pad_mask=pad_mask)
+    preds = LabImageBatch(lab=preds, pad_mask=pad_mask)
+    preds.visualize(other=reals, **kwargs)
 
 
 class BaseModule(LightningModule, ABC):

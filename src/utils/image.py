@@ -248,7 +248,7 @@ class LabImageBatch:
 
     # === Other ===
 
-    def visualize(self, other: "LabImageBatch" = None, draw_n=6,
+    def visualize(self, other: "LabImageBatch" = None, draw_n=8,
                   show=True, save=False, path=None, fname=None):
         n_rows = 3 if other else 2
         # Handle number of images to draw

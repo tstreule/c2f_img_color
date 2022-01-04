@@ -15,7 +15,8 @@ from pytorch_lightning import LightningDataModule
 
 from .image import *
 
-__all__ = ["URLs", "LabImageDataLoader", "ColorizationBatch", "ColorizationDataset", "ColorizationDataModule"]
+__all__ = ["URLs", "LabImageDataLoader", "ColorizationBatch",
+           "ColorizationDataset", "ColorizationDataModule", "make_dataloader"]
 
 LabImageDataLoader = DataLoader[LabImageBatch]
 ColorizationBatch = tuple[torch.Tensor, tuple[torch.BoolTensor, float]]
@@ -30,7 +31,7 @@ def is_url(string: str) -> bool:
 
 class ColorizationDataset(Dataset):
 
-    def __init__(self, paths: ArrayLike, split: Optional[str] = "train", max_img_size=None):
+    def __init__(self, paths: ArrayLike, split: Optional[str] = "test", max_img_size=None):
         """
         A PyTorch Dataset for color images.
 
@@ -203,7 +204,6 @@ class ColorizationDataModule(LightningDataModule):
         return kwargs
 
     def train_dataloader(self):
-        shuffle_kwargs = {"shuffle": True}
         return DataLoader(self.data_train, **self.dl_kwargs, **self.dl_shuffle_kwargs)
 
     def val_dataloader(self):
@@ -214,3 +214,14 @@ class ColorizationDataModule(LightningDataModule):
 
     def extract_batch_size(self):
         return self.batch_size
+
+
+def make_dataloader(
+        data_dir: str, batch_size=16, n_workers=1, pin_memory=True, rng=None, **kwargs
+) -> LabImageDataLoader:
+    paths = ColorizationDataModule.handle_data_dir(data_dir).glob("*.jpg")
+    dataset = ColorizationDataset(list(paths), **kwargs)
+    dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=n_workers,
+                            collate_fn=dataset.collate_fn, pin_memory=pin_memory,
+                            generator=rng, shuffle=bool(rng))
+    return dataloader
