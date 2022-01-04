@@ -9,7 +9,7 @@ from pytorch_lightning import LightningModule
 from kornia.losses import ssim_loss, psnr_loss
 
 from .discriminator import PatchDiscriminator
-from .generator import build_res_u_net
+from .generator import build_res_u_net, build_res_u_net_lite
 from .utils.data import ColorizationBatch
 from .utils.image import LabImage
 from .utils.utils import *
@@ -101,6 +101,7 @@ class PreTrainer(BaseModule):
         self.save_hyperparameters(ignore=[*kwargs.keys()])
         # Create generator
         self.G_net = init_weights(build_res_u_net(*gen_net_params))
+        self.G_net = init_weights(build_res_u_net_lite(*gen_net_params))
 
     @classmethod
     def add_model_specific_args(cls, parent_parser: ArgumentParser):
