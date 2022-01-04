@@ -92,12 +92,14 @@ def main(args):
 
     # Training
     model = module(**vars(args))
-    # TODO: Add callbacks for saving good models
     trainer = Trainer.from_argparse_args(args)
     trainer.fit(model, datamodule=dm, ckpt_path=args.full_ckpt_path)
 
     # Test (only right before publishing your paper or pushing to production!)
     # trainer.test(ckpt_path="best", datamodule=dm)
+
+    print_args = [f"{a}={getattr(args, a)}" for a in vars(args)]
+    print(f"\nPassed arguments: {', '.join(print_args)}")
 
 
 if __name__ == '__main__':
