@@ -69,10 +69,10 @@ class ColorizationDataset(Dataset):
 
     def _limit_size(self, img):
         if self.max_img_size is not None:
-            sizes = np.array(img.shape, dtype=int)
+            sizes = np.array(img.size, dtype=int)
             max_sizes = np.round(self.max_img_size / max(sizes) * sizes).astype(int)
             new_sizes = np.min([sizes, max_sizes], axis=0)
-            resize = T.Resize(tuple(new_sizes), T.InterpolationMode.BICUBIC)
+            resize = T.Resize(tuple([new_sizes[1], new_sizes[0]]), T.InterpolationMode.BICUBIC)
             return resize(img)
         else:
             return img
