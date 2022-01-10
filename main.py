@@ -58,7 +58,7 @@ def make_parser(hard_args=None) -> ArgumentParser:
 
     # --- Set default args ---
     parser.set_defaults(
-        data_dir=URLs.COCO_SAMPLE,
+        data_dir=URLs.COCO_TINY,
         seed=123456789,
     )
 
