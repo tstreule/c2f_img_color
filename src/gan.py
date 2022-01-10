@@ -98,7 +98,11 @@ class BaseModule(LightningModule, ABC):
             img_tensor = torch.tensor(rgb).type_as(imgs[0])
             self.logger.experiment.add_image("generated_images", img_tensor, self.current_epoch)
 
-
+    def colorize(self, L):
+        if len(L.shape)==3:
+            L = torch.unsqueeze(L, dim=0)
+        with torch.no_grad():
+            return torch.cat([L, self.G_net(L)], dim=1).detach()
 class PreTrainer(BaseModule):
     def __init__(
             self,
@@ -311,3 +315,39 @@ class C2FImageGAN(ImageGAN):
         pred_imgs.masked_fill_(resize(pad_mask), pad_fill_value)  # enforce zero difference at padded values
 
         return pred_imgs
+
+    def colorize_it(self, img_in, *, rec_depth=0):
+        print(rec_depth)
+        real_sizes = img_in.shape[2:]
+        smaller_sizes = [int(size / self.hparams.shrink_size) for size in real_sizes]
+
+        if any(size < self.hparams.min_ax_size for size in smaller_sizes) \
+                or rec_depth >= self.hparams.max_c2f_depth:
+            # Initialize dummy predictions
+            # when not training `real_imgs` can also be just a "L"
+            prev_pred_imgs = torch.zeros(img_in.shape[0], 3, *img_in.shape[2:]).type_as(img_in)
+        else:
+            resize = T.Resize(tuple(smaller_sizes), T.InterpolationMode.BICUBIC)
+            resized_imgs = resize(img_in)
+            prev_pred_imgs = self.colorize_it(resized_imgs, rec_depth=rec_depth+1)
+            del resized_imgs
+
+        # Resizer for scaling up or down
+        resize = T.Resize(tuple(real_sizes), T.InterpolationMode.BICUBIC)
+
+        # Prediction
+        lights = img_in[:, :1]  # use `L` part
+        colors = resize(prev_pred_imgs[:, 1:])  # use `ab` part  # TODO: `.detach()`?
+        pred_inputs = torch.cat([lights, colors], dim=1)
+        del colors
+        pred_imgs = torch.cat([lights, self.G_net(pred_inputs)], dim=1)
+        del lights, pred_inputs
+        print(rec_depth, " Done")
+        return pred_imgs
+
+
+    def colorize_c2f(self, L):
+        if len(L.shape)==3:
+            L = torch.unsqueeze(L, dim=0)
+        with torch.no_grad():
+            return self.colorize_it(L).detach()
