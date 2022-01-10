@@ -95,7 +95,7 @@ def main(args: list[str] = None) -> Union[PreTrainer, ImageGAN, C2FImageGAN]:
 
     if args.full_ckpt_path:
         # Load already trained model
-        model = module.load_from_checkpoint(args.full_ckpt_path)
+        model = module.load_from_checkpoint(args.full_ckpt_path, pretrained_ckpt_path=None)
     else:
         # Training
         model = module(**vars(args))

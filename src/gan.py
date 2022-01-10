@@ -168,13 +168,18 @@ class ImageGAN(BaseModule):
     ):
         super().__init__()
         self.save_hyperparameters(ignore=[*kwargs.keys()])
+
         # Set/create generator and discriminator
-        pretrained = PreTrainer.load_from_checkpoint(pretrained_ckpt_path)
-        assert (*gen_net_params,) == (*pretrained.hparams.gen_net_params,), (
-            f"expected gen_net_params={pretrained.hparams.gen_net_params} "
-            f"but found {gen_net_params} instead.")
-        self.G_net = pretrained.G_net
-        self.D_net = init_weights(PatchDiscriminator(*dis_net_params))
+        self.G_net = build_res_u_net(*gen_net_params)
+        self.D_net = PatchDiscriminator(*dis_net_params)
+
+        if pretrained_ckpt_path is not None:
+            pretrained = PreTrainer.load_from_checkpoint(pretrained_ckpt_path)
+            assert (*gen_net_params,) == (*pretrained.hparams.gen_net_params,), (
+                f"expected gen_net_params={pretrained.hparams.gen_net_params} "
+                f"but found {gen_net_params} instead.")
+            self.G_net = pretrained.G_net
+            self.D_net = init_weights(self.D_net)
 
     @classmethod
     def add_model_specific_args(cls, parent_parser: ArgumentParser, *, return_group: bool = True):
