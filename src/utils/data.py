@@ -132,7 +132,7 @@ class ColorizationDataModule(LightningDataModule):
     def handle_data_dir(data_dir: str) -> Path:
         if is_url(data_dir):
             # Download
-            return Path(untar_data(data_dir)) / "train_sample"
+            return Path(untar_data(data_dir))
         else:
             return Path(data_dir)
 
@@ -155,7 +155,7 @@ class ColorizationDataModule(LightningDataModule):
 
     def setup(self, stage: Optional[str] = None) -> None:
         # Grab all image file names
-        paths = self.data_dir.glob("*.jpg")
+        paths = self.data_dir.rglob("*.jpg")
         paths = np.array(list(paths))
         # Check dataset size limit
         if self.dataset_size < 0:
@@ -219,7 +219,7 @@ class ColorizationDataModule(LightningDataModule):
 def make_dataloader(
         data_dir: str, batch_size=16, n_workers=1, pin_memory=True, rng=None, **kwargs
 ) -> LabImageDataLoader:
-    paths = ColorizationDataModule.handle_data_dir(data_dir).glob("*.jpg")
+    paths = ColorizationDataModule.handle_data_dir(data_dir).rglob("*.jpg")
     dataset = ColorizationDataset(list(paths), **kwargs)
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=n_workers,
                             collate_fn=dataset.collate_fn, pin_memory=pin_memory,
