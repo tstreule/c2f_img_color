@@ -67,12 +67,12 @@ class ColorizationDataset(Dataset):
     def __len__(self):
         return len(self.paths)
 
-    def _limit_size(self, img):
+    def _limit_size(self, img: Image.Image):
         if self.max_img_size is not None:
-            sizes = np.array(img.size, dtype=int)
+            sizes = np.array(img.size, dtype=int)[::-1]  # flip
             max_sizes = np.round(self.max_img_size / max(sizes) * sizes).astype(int)
             new_sizes = np.min([sizes, max_sizes], axis=0)
-            resize = T.Resize(tuple([new_sizes[1], new_sizes[0]]), T.InterpolationMode.BICUBIC)
+            resize = T.Resize(tuple(new_sizes), T.InterpolationMode.BICUBIC)
             return resize(img)
         else:
             return img
