@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from argparse import ArgumentParser
 from collections import OrderedDict
+from typing import Union
 
 import torch
 from torch import nn
@@ -16,19 +17,28 @@ from .utils.utils import *
 
 import torchvision.transforms as T
 
-__all__ = ["predict_and_visualize", "BaseModule", "PreTrainer", "ImageGAN", "C2FImageGAN"]
+__all__ = ["BaseModule", "PreTrainer", "ImageGAN", "C2FImageGAN"]
 
 # TODO: handle learning rate according to batch size
 
 
-def predict_and_visualize(model: "BaseModule", batch: ColorizationBatch, **kwargs):
-    # Predict images
-    reals, preds = model.get_real_n_fake_imgs(batch)
-    # Visualize
-    _, (pad_mask, _) = batch
-    reals = LabImageBatch(lab=reals, pad_mask=pad_mask)
-    preds = LabImageBatch(lab=preds, pad_mask=pad_mask)
-    preds.visualize(other=reals, **kwargs)
+def make_colorization_batch(data: Union[torch.Tensor, LabImage, LabImageBatch, ColorizationBatch]):
+    if isinstance(data, torch.Tensor) and len(data.size()) == 3:
+        data = LabImage(lab=data)
+    if isinstance(data, torch.Tensor) and len(data.size()) == 4:
+        data = LabImageBatch(lab=data, pad_mask=[0])
+    if isinstance(data, LabImage):
+        data = LabImageBatch(batch=[data])
+    if isinstance(data, LabImageBatch):
+        data = data.lab, (data.pad_mask, data.pad_fill_value)
+    assert isinstance(data, tuple), f"Could not make `ColorizationBatch` out of data: {type(data)}"
+    return data
+
+
+def make_lab_image_batch(data):
+    data = make_colorization_batch(data)
+    data = LabImageBatch(lab=data[0], pad_mask=data[1][0])
+    return data
 
 
 class BaseModule(LightningModule, ABC):
@@ -98,11 +108,20 @@ class BaseModule(LightningModule, ABC):
             img_tensor = torch.tensor(rgb).type_as(imgs[0])
             self.logger.experiment.add_image("generated_images", img_tensor, self.current_epoch)
 
-    def colorize(self, L):
-        if len(L.shape)==3:
-            L = torch.unsqueeze(L, dim=0)
-        with torch.no_grad():
-            return torch.cat([L, self.G_net(L)], dim=1).detach()
+    @torch.no_grad()
+    def colorize(self, data):
+        batch = make_colorization_batch(data)
+        batch = self(batch), batch[1]
+        pred_batch = make_lab_image_batch(batch)
+        return pred_batch
+
+    @staticmethod
+    def visualize(imgs, imgs2=None, **kwargs):
+        imgs = make_lab_image_batch(imgs)
+        imgs2 = None if imgs2 is None else make_lab_image_batch(imgs2)
+        imgs.visualize(other=imgs2, **kwargs)
+
+
 class PreTrainer(BaseModule):
     def __init__(
             self,
@@ -315,39 +334,3 @@ class C2FImageGAN(ImageGAN):
         pred_imgs.masked_fill_(resize(pad_mask), pad_fill_value)  # enforce zero difference at padded values
 
         return pred_imgs
-
-    def colorize_it(self, img_in, *, rec_depth=0):
-        print(rec_depth)
-        real_sizes = img_in.shape[2:]
-        smaller_sizes = [int(size / self.hparams.shrink_size) for size in real_sizes]
-
-        if any(size < self.hparams.min_ax_size for size in smaller_sizes) \
-                or rec_depth >= self.hparams.max_c2f_depth:
-            # Initialize dummy predictions
-            # when not training `real_imgs` can also be just a "L"
-            prev_pred_imgs = torch.zeros(img_in.shape[0], 3, *img_in.shape[2:]).type_as(img_in)
-        else:
-            resize = T.Resize(tuple(smaller_sizes), T.InterpolationMode.BICUBIC)
-            resized_imgs = resize(img_in)
-            prev_pred_imgs = self.colorize_it(resized_imgs, rec_depth=rec_depth+1)
-            del resized_imgs
-
-        # Resizer for scaling up or down
-        resize = T.Resize(tuple(real_sizes), T.InterpolationMode.BICUBIC)
-
-        # Prediction
-        lights = img_in[:, :1]  # use `L` part
-        colors = resize(prev_pred_imgs[:, 1:])  # use `ab` part  # TODO: `.detach()`?
-        pred_inputs = torch.cat([lights, colors], dim=1)
-        del colors
-        pred_imgs = torch.cat([lights, self.G_net(pred_inputs)], dim=1)
-        del lights, pred_inputs
-        print(rec_depth, " Done")
-        return pred_imgs
-
-
-    def colorize_c2f(self, L):
-        if len(L.shape)==3:
-            L = torch.unsqueeze(L, dim=0)
-        with torch.no_grad():
-            return self.colorize_it(L).detach()
