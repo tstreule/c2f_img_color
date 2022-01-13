@@ -1,9 +1,13 @@
 # Iterative Coarse-to-Fine Image Colorization with GAN
 
-A semester project for the class Deep Learning at ETH in autumn semester 2021.
+A semester project for the class Deep Learning at ETH Zürich in autumn semester 2021.
 
 In this paper, we propose a novel design to solve the problem of coloring high-resolution images whose colors should be consistent throughout the image.
 Our main contribution is the idea of scaling and coloring input images "from coarse to fine" in an iterative manner. Instead of directly coloring a grayscale image, we first colorize a pixelated version and scale it up. The result of each iteration then serves as a color bias for the next larger pixelated version until we reach the final image size.
+
+<p style="border: red solid 1px; padding: 0.5em;">
+  <b>TODO:</b> Include image here (e.g., model design <i>and/or</i> sample images).
+</p>
 
 
 ## Prerequisites
@@ -18,10 +22,10 @@ Our main contribution is the idea of scaling and coloring input images "from coa
 ### Installation
 
 - Clone this repo:
-```bash
-git clone https://github.com/tstreule/c2f_img_color
-cd c2f_img_color
-```
+  ```bash
+  git clone https://github.com/tstreule/c2f_img_color
+  cd c2f_img_color
+  ```
 
 - Install [PyTorch](https://pytorch.org) and other dependencies:
   - For pip users, please type the command `pip install -r requirements.txt`.
