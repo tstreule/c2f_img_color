@@ -6,6 +6,9 @@ In this paper, we propose a novel design to solve the problem of coloring high-r
 Our main contribution is the idea of scaling and coloring input images "from coarse to fine" in an iterative manner. Instead of directly coloring a grayscale image, we first colorize a pixelated version and scale it up. The result of each iteration then serves as a color bias for the next larger pixelated version until we reach the final image size.
 
 > ![#f03c15](https://via.placeholder.com/15/f03c15/000000?text=+)
+> **TODO:** Make a reference to our paper as soon as it's uploaded.
+
+> ![#f03c15](https://via.placeholder.com/15/f03c15/000000?text=+)
 > **TODO:** Include image here (e.g., model design <i>and/or</i> sample images).
 
 
