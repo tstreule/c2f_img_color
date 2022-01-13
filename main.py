@@ -6,7 +6,7 @@ Hint:
 """
 
 import warnings
-from typing import Type, Union
+from typing import Type, Union, Optional, Sequence
 import numpy as np
 import torch
 from pytorch_lightning import Trainer
@@ -33,7 +33,7 @@ def model_cls(model: str) -> Type[BaseModule]:
         return BaseModule  # return dummy module
 
 
-def make_parser(hard_args=None) -> ArgumentParser:
+def make_parser(hard_args: Optional[Sequence[str]] = None) -> ArgumentParser:
 
     # --- Add PROGRAM level args ---
     parent_parser = ArgumentParser(add_help=False)  # suppress help, so we print all options in response to ``--help``
@@ -85,7 +85,11 @@ def adjust_args(args):
     return args
 
 
-def main(args: list[str] = None) -> Union[PreTrainer, ImageGAN, C2FImageGAN]:
+def main(args: Optional[str] = "", **kwargs) -> Union[PreTrainer, ImageGAN, C2FImageGAN]:
+    args = args.split()
+    for key, val in kwargs.items():
+        vals = [val] if not isinstance(val, (list, tuple)) else val
+        args += [f"--{key}", *(str(v) for v in vals)]
     args = make_parser(args).parse_args(args)
     args = adjust_args(args)
 
