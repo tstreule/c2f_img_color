@@ -78,10 +78,13 @@ class BaseModule(LightningModule, ABC):
         pred_imgs.masked_fill_(pad_mask, pad_fill_value)  # enforce zero difference at padded values
         return pred_imgs
 
-    def get_real_n_fake_imgs(self, batch) -> tuple[torch.Tensor, torch.Tensor]:
+    def get_real_n_fake_imgs(self, batch, w_pyramid = False) -> tuple[torch.Tensor, torch.Tensor]:
         real_imgs, _ = batch
-        fake_imgs = self(batch)
-        return real_imgs, fake_imgs
+        fake_imgs, pyramid = self(batch)
+        if w_pyramid:
+            return real_imgs, fake_imgs, pyramid
+        else:
+            return real_imgs, fake_imgs
 
     # === Validation and testing
 
@@ -111,9 +114,9 @@ class BaseModule(LightningModule, ABC):
     @torch.no_grad()
     def colorize(self, data):
         batch = make_colorization_batch(data)
-        batch = self(batch), batch[1]
-        pred_batch = make_lab_image_batch(batch)
-        return pred_batch
+        pred,batch_pyramid = self(batch)
+        pred_batch = make_lab_image_batch((pred, batch[1]))
+        return pred_batch, batch_pyramid
 
     @staticmethod
     def visualize(imgs, imgs2=None, **kwargs):
@@ -233,7 +236,7 @@ class ImageGAN(BaseModule):
         return opt_d, opt_g  # note that the discriminator comes first
 
     def training_step(self, batch, batch_idx, optimizer_idx):
-        imgs, fake_imgs = self.get_real_n_fake_imgs(batch)
+        imgs, fake_imgs, pyramid = self.get_real_n_fake_imgs(batch, w_pyramid=True)
 
         # --- Update discriminator ---
         if optimizer_idx == 0:
@@ -253,9 +256,13 @@ class ImageGAN(BaseModule):
         if optimizer_idx == 1:
             set_requires_grad(self.D_net, False)
 
+
             # Get losses
             gan_loss = self.gan_criterion(self.D_net(fake_imgs), False)
-            mae_loss = self.mae_criterion(imgs[:, 1:], fake_imgs[:, 1:])  # use `ab` part only
+            mae_loss = self.mae_criterion(imgs[:, 1:], fake_imgs[:, 1:]) / (len(pyramid)+1)  # use `ab` part only
+            for p in pyramid:
+                mae_loss += self.mae_criterion(p["prediction"][:, 1:], p["real"][:, 1:]) / (len(pyramid)+1)
+
             g_loss = gan_loss + mae_loss * self.hparams.gen_lambda_mae
 
             tqdm_dict = {"g_loss": g_loss.detach()}
@@ -304,7 +311,7 @@ class C2FImageGAN(ImageGAN):
 
     # === Forward ===
 
-    def forward(self, batch, *, rec_depth=0):
+    def forward(self, batch, *, rec_depth=0, intermediate_supervision = False):
         real_imgs, (pad_mask, pad_fill_value) = batch
 
         real_sizes = real_imgs.shape[2:]
@@ -315,10 +322,11 @@ class C2FImageGAN(ImageGAN):
             # Initialize dummy predictions
             # when not training `real_imgs` can also be just a "L"
             prev_pred_imgs = torch.zeros(real_imgs.shape[0], 3, *real_imgs.shape[2:]).type_as(real_imgs)
+            pred_pyramid = []
         else:
             resize = T.Resize(tuple(smaller_sizes), T.InterpolationMode.BICUBIC)
             resized_batch = resize(real_imgs), (resize(pad_mask), pad_fill_value)
-            prev_pred_imgs = self(resized_batch, rec_depth=rec_depth+1)
+            prev_pred_imgs, pred_pyramid = self(resized_batch, rec_depth=rec_depth+1)
             del resized_batch
 
         # Resizer for scaling up or down
@@ -333,4 +341,7 @@ class C2FImageGAN(ImageGAN):
         del lights, pred_inputs
         pred_imgs.masked_fill_(resize(pad_mask), pad_fill_value)  # enforce zero difference at padded values
 
-        return pred_imgs
+        pred_pyramid.append({"prediction":pred_imgs, "real": real_imgs})
+        return pred_imgs, pred_pyramid
+
+
