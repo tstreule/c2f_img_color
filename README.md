@@ -3,7 +3,7 @@
 A semester project for the class Deep Learning at ETH Zürich in autumn semester 2021.
 
 In this paper, we propose a novel design to solve the problem of coloring high-resolution images whose colors should be consistent throughout the image.
-Our main contribution is the idea of scaling and coloring input images "from coarse to fine" in an iterative manner. Instead of directly coloring a grayscale image, we first colorize a pixelated version and scale it up. The result of each iteration then serves as a color bias for the next less pixelated version until we reach the final image size. A sketch of the base model and our model are depicted below (check out the report for further explanations):
+Our main contribution is the idea of scaling and coloring input images "from coarse to fine" in an iterative manner. Instead of directly coloring a grayscale image, we first colorize a pixelated version and scale it up. The result of each iteration then serves as a color bias for the next less pixelated version until we reach the final image size. A sketch of the base model and our model are depicted below (check out the [report](other/project_report.pdf) for further explanations):
 
 
 <img src="other/graphics/network_arch.png" alt="ground truth" style="width:300px;"/>
@@ -19,12 +19,6 @@ Ground truth           |  Colorized image
 :-------------------------:|:-------------------------:
 <img src="other/graphics/Ground_truth.jpg" alt="ground truth" style="width:250px;"/>  |  <img src="other/graphics/Colorized_image.jpg" alt="colorized image" style="width:250px;"/>
 
-
-> ![#f03c15](https://via.placeholder.com/15/f03c15/000000?text=+)
-> **TODO:** Make a reference to our paper as soon as it's uploaded.
-
-> ![#f03c15](https://via.placeholder.com/15/f03c15/000000?text=+)
-> **TODO:** Include image here (e.g., model design <i>and/or</i> sample images).
 
 
 
