@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from argparse import ArgumentParser
 from collections import OrderedDict
+from typing import Union
 
 import torch
 from torch import nn
@@ -11,7 +12,7 @@ from kornia.losses import ssim_loss, psnr_loss
 from .discriminator import PatchDiscriminator
 from .generator import build_res_u_net
 from .utils.data import ColorizationBatch
-from .utils.image import LabImage
+from .utils.image import LabImage, LabImageBatch
 from .utils.utils import *
 
 import torchvision.transforms as T
@@ -19,6 +20,25 @@ import torchvision.transforms as T
 __all__ = ["BaseModule", "PreTrainer", "ImageGAN", "C2FImageGAN"]
 
 # TODO: handle learning rate according to batch size
+
+
+def make_colorization_batch(data: Union[torch.Tensor, LabImage, LabImageBatch, ColorizationBatch]):
+    if isinstance(data, torch.Tensor) and len(data.size()) == 3:
+        data = LabImage(lab=data)
+    if isinstance(data, torch.Tensor) and len(data.size()) == 4:
+        data = LabImageBatch(lab=data, pad_mask=[0])
+    if isinstance(data, LabImage):
+        data = LabImageBatch(batch=[data])
+    if isinstance(data, LabImageBatch):
+        data = data.lab, (data.pad_mask, data.pad_fill_value)
+    assert isinstance(data, tuple), f"Could not make `ColorizationBatch` out of data: {type(data)}"
+    return data
+
+
+def make_lab_image_batch(data):
+    data = make_colorization_batch(data)
+    data = LabImageBatch(lab=data[0], pad_mask=data[1][0])
+    return data
 
 
 class BaseModule(LightningModule, ABC):
@@ -87,6 +107,19 @@ class BaseModule(LightningModule, ABC):
             rgb = LabImage(lab=sample_grid.cpu()).rgb_.transpose((2, 0, 1))
             img_tensor = torch.tensor(rgb).type_as(imgs[0])
             self.logger.experiment.add_image("generated_images", img_tensor, self.current_epoch)
+
+    @torch.no_grad()
+    def colorize(self, data):
+        batch = make_colorization_batch(data)
+        batch = self(batch), batch[1]
+        pred_batch = make_lab_image_batch(batch)
+        return pred_batch
+
+    @staticmethod
+    def visualize(imgs, imgs2=None, **kwargs):
+        imgs = make_lab_image_batch(imgs)
+        imgs2 = None if imgs2 is None else make_lab_image_batch(imgs2)
+        imgs.visualize(other=imgs2, **kwargs)
 
 
 class PreTrainer(BaseModule):
@@ -158,12 +191,18 @@ class ImageGAN(BaseModule):
     ):
         super().__init__()
         self.save_hyperparameters(ignore=[*kwargs.keys()])
-        # Set/create generator and discriminator
-        pretrained = PreTrainer.load_from_checkpoint(pretrained_ckpt_path)
-        assert (*gen_net_params,) == (*pretrained.hparams.gen_net_params,), (
-            f"expected gen_net_params={pretrained.hparams.gen_net_params} "
-            f"but found {gen_net_params} instead.")
-        self.G_net = pretrained.G_net
+
+        # Load/create generator
+        if pretrained_ckpt_path is not None:
+            pretrained = PreTrainer.load_from_checkpoint(pretrained_ckpt_path)
+            assert (*gen_net_params,) == (*pretrained.hparams.gen_net_params,), (
+                f"expected gen_net_params={pretrained.hparams.gen_net_params} "
+                f"but found {gen_net_params} instead.")
+            self.G_net = pretrained.G_net
+        else:
+            self.G_net = init_weights(build_res_u_net(*gen_net_params))
+
+        # Create discriminator
         self.D_net = init_weights(PatchDiscriminator(*dis_net_params))
 
     @classmethod

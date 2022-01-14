@@ -15,7 +15,8 @@ from pytorch_lightning import LightningDataModule
 
 from .image import *
 
-__all__ = ["URLs", "LabImageDataLoader", "ColorizationBatch", "ColorizationDataset", "ColorizationDataModule"]
+__all__ = ["URLs", "LabImageDataLoader", "ColorizationBatch",
+           "ColorizationDataset", "ColorizationDataModule", "make_dataloader"]
 
 LabImageDataLoader = DataLoader[LabImageBatch]
 ColorizationBatch = tuple[torch.Tensor, tuple[torch.BoolTensor, float]]
@@ -30,7 +31,7 @@ def is_url(string: str) -> bool:
 
 class ColorizationDataset(Dataset):
 
-    def __init__(self, paths: ArrayLike, split: Optional[str] = "train", max_img_size=None):
+    def __init__(self, paths: ArrayLike, split: Optional[str] = "test", max_img_size=None):
         """
         A PyTorch Dataset for color images.
 
@@ -66,9 +67,9 @@ class ColorizationDataset(Dataset):
     def __len__(self):
         return len(self.paths)
 
-    def _limit_size(self, img):
+    def _limit_size(self, img: Image.Image):
         if self.max_img_size is not None:
-            sizes = np.array(img.shape, dtype=int)
+            sizes = np.array(img.size, dtype=int)[::-1]  # flip
             max_sizes = np.round(self.max_img_size / max(sizes) * sizes).astype(int)
             new_sizes = np.min([sizes, max_sizes], axis=0)
             resize = T.Resize(tuple(new_sizes), T.InterpolationMode.BICUBIC)
@@ -131,7 +132,7 @@ class ColorizationDataModule(LightningDataModule):
     def handle_data_dir(data_dir: str) -> Path:
         if is_url(data_dir):
             # Download
-            return Path(untar_data(data_dir)) / "train_sample"
+            return Path(untar_data(data_dir))
         else:
             return Path(data_dir)
 
@@ -154,7 +155,7 @@ class ColorizationDataModule(LightningDataModule):
 
     def setup(self, stage: Optional[str] = None) -> None:
         # Grab all image file names
-        paths = self.data_dir.glob("*.jpg")
+        paths = self.data_dir.rglob("*.jpg")
         paths = np.array(list(paths))
         # Check dataset size limit
         if self.dataset_size < 0:
@@ -203,7 +204,6 @@ class ColorizationDataModule(LightningDataModule):
         return kwargs
 
     def train_dataloader(self):
-        shuffle_kwargs = {"shuffle": True}
         return DataLoader(self.data_train, **self.dl_kwargs, **self.dl_shuffle_kwargs)
 
     def val_dataloader(self):
@@ -214,3 +214,14 @@ class ColorizationDataModule(LightningDataModule):
 
     def extract_batch_size(self):
         return self.batch_size
+
+
+def make_dataloader(
+        data_dir: str, batch_size=16, n_workers=1, pin_memory=True, rng=None, **kwargs
+) -> LabImageDataLoader:
+    paths = ColorizationDataModule.handle_data_dir(data_dir).rglob("*.jpg")
+    dataset = ColorizationDataset(list(paths), **kwargs)
+    dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=n_workers,
+                            collate_fn=dataset.collate_fn, pin_memory=pin_memory,
+                            generator=rng, shuffle=bool(rng))
+    return dataloader
