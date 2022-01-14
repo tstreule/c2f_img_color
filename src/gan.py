@@ -235,40 +235,45 @@ class ImageGAN(BaseModule):
         opt_d = torch.optim.Adam(self.D_net.parameters(), lr=dis_lr, betas=dis_betas)
         return opt_d, opt_g  # note that the discriminator comes first
 
-    def training_step(self, batch, batch_idx, optimizer_idx):
+    def training_step(self, batch, batch_idx):
         imgs, fake_imgs, pyramid = self.get_real_n_fake_imgs(batch, w_pyramid=True)
 
         # --- Update discriminator ---
-        if optimizer_idx == 0:
-            set_requires_grad(self.D_net, True)
 
-            # Get losses
-            real_loss = self.gan_criterion(self.D_net(imgs), True)
-            fake_loss = self.gan_criterion(self.D_net(fake_imgs.detach()), False)
-            d_loss = (real_loss + fake_loss) / 2
+        set_requires_grad(self.D_net, True)
 
-            tqdm_dict = {"d_loss": d_loss.detach()}
-            log_dict = {"batch_size": len(imgs), **tqdm_dict}
-            output = OrderedDict({"loss": d_loss, "progress_bar": tqdm_dict, "log": log_dict})
-            return output
+        # Get losses
+        real_loss = self.gan_criterion(self.D_net(imgs), True)
+        fake_loss = self.gan_criterion(self.D_net(fake_imgs.detach()), False)
+        d_loss = (real_loss + fake_loss) / 2
+
+        tqdm_dict = {"d_loss": d_loss.detach()}
+        log_dict = {"batch_size": len(imgs), **tqdm_dict}
+        output = OrderedDict({"loss": d_loss, "progress_bar": tqdm_dict, "log": log_dict})
+        opt = self.optimizers()[0]
+        opt.zero_grad()
+
+        self.manual_backward(d_loss)
+        opt.step()
+
 
         # --- Update generator ---
-        if optimizer_idx == 1:
-            set_requires_grad(self.D_net, False)
+
+        set_requires_grad(self.D_net, False)
 
 
-            # Get losses
-            gan_loss = self.gan_criterion(self.D_net(fake_imgs), False)
-            mae_loss = self.mae_criterion(imgs[:, 1:], fake_imgs[:, 1:]) / (len(pyramid)+1)  # use `ab` part only
-            for p in pyramid:
-                mae_loss += self.mae_criterion(p["prediction"][:, 1:], p["real"][:, 1:]) / (len(pyramid)+1)
+        # Get losses
+        gan_loss = self.gan_criterion(self.D_net(fake_imgs), False)
+        mae_loss = self.mae_criterion(imgs[:, 1:], fake_imgs[:, 1:]) / (len(pyramid)+1)  # use `ab` part only
+        for p in pyramid:
+            mae_loss += self.mae_criterion(p["prediction"][:, 1:], p["real"][:, 1:]) / (len(pyramid)+1)
 
-            g_loss = gan_loss + mae_loss * self.hparams.gen_lambda_mae
+        g_loss = gan_loss + mae_loss * self.hparams.gen_lambda_mae
 
-            tqdm_dict = {"g_loss": g_loss.detach()}
-            log_dict = {"batch_size": len(imgs), **tqdm_dict}
-            output = OrderedDict({"loss": g_loss, "progress_bar": tqdm_dict, "log": log_dict})
-            return output
+        tqdm_dict = {"g_loss": g_loss.detach()}
+        log_dict = {"batch_size": len(imgs), **tqdm_dict}
+        output = OrderedDict({"loss": g_loss, "progress_bar": tqdm_dict, "log": log_dict})
+        return output
 
     # === Validation and testing ===
 
@@ -298,6 +303,7 @@ class C2FImageGAN(ImageGAN):
         super().__init__(*args, **kwargs)
         self.save_hyperparameters(*args, shrink_size, min_ax_size, max_c2f_depth)
 
+        self.automatic_optimization = False
     @classmethod
     def add_model_specific_args(cls, parent_parser: ArgumentParser, *args):
         p = super().add_model_specific_args(parent_parser, return_group=True)
@@ -342,6 +348,20 @@ class C2FImageGAN(ImageGAN):
         pred_imgs.masked_fill_(resize(pad_mask), pad_fill_value)  # enforce zero difference at padded values
 
         pred_pyramid.append({"prediction":pred_imgs, "real": real_imgs})
+        if intermediate_supervision:
+            opt = self.optimizers()[1]
+            opt.zero_grad()
+
+            gan_loss = self.gan_criterion(self.D_net(pred_imgs), False)
+            mae_loss = self.mae_criterion(real_imgs[:, 1:], pred_imgs[:, 1:]) # use `ab` part only
+
+            g_loss = gan_loss + mae_loss * self.hparams.gen_lambda_mae
+            self.manual_backward(g_loss)
+            opt.step()
+
+
+
+
         return pred_imgs, pred_pyramid
 
 
