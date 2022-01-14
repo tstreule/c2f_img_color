@@ -78,7 +78,8 @@ class BaseModule(LightningModule, ABC):
         pred_imgs.masked_fill_(pad_mask, pad_fill_value)  # enforce zero difference at padded values
         return pred_imgs
 
-    def get_real_n_fake_imgs(self, batch, w_pyramid = False) -> tuple[torch.Tensor, torch.Tensor]:
+    def get_real_n_fake_imgs(self, batch, w_pyramid=False) \
+            -> tuple[torch.Tensor, torch.Tensor]:
         real_imgs, _ = batch
         fake_imgs, pyramid = self(batch)
         if w_pyramid:
@@ -256,11 +257,9 @@ class ImageGAN(BaseModule):
         self.manual_backward(d_loss)
         opt.step()
 
-
         # --- Update generator ---
 
         set_requires_grad(self.D_net, False)
-
 
         # Get losses
         gan_loss = self.gan_criterion(self.D_net(fake_imgs), False)
@@ -304,6 +303,7 @@ class C2FImageGAN(ImageGAN):
         self.save_hyperparameters(*args, shrink_size, min_ax_size, max_c2f_depth)
 
         self.automatic_optimization = False
+
     @classmethod
     def add_model_specific_args(cls, parent_parser: ArgumentParser, *args):
         p = super().add_model_specific_args(parent_parser, return_group=True)
@@ -317,7 +317,7 @@ class C2FImageGAN(ImageGAN):
 
     # === Forward ===
 
-    def forward(self, batch, *, rec_depth=0, intermediate_supervision = False):
+    def forward(self, batch, *, rec_depth=0, intermediate_supervision=False):
         real_imgs, (pad_mask, pad_fill_value) = batch
 
         real_sizes = real_imgs.shape[2:]
@@ -347,21 +347,16 @@ class C2FImageGAN(ImageGAN):
         del lights, pred_inputs
         pred_imgs.masked_fill_(resize(pad_mask), pad_fill_value)  # enforce zero difference at padded values
 
-        pred_pyramid.append({"prediction":pred_imgs, "real": real_imgs})
+        pred_pyramid.append({"prediction": pred_imgs, "real": real_imgs})
         if intermediate_supervision:
             opt = self.optimizers()[1]
             opt.zero_grad()
 
             gan_loss = self.gan_criterion(self.D_net(pred_imgs), False)
-            mae_loss = self.mae_criterion(real_imgs[:, 1:], pred_imgs[:, 1:]) # use `ab` part only
+            mae_loss = self.mae_criterion(real_imgs[:, 1:], pred_imgs[:, 1:])  # use `ab` part only
 
             g_loss = gan_loss + mae_loss * self.hparams.gen_lambda_mae
             self.manual_backward(g_loss)
             opt.step()
 
-
-
-
         return pred_imgs, pred_pyramid
-
-
