@@ -115,7 +115,7 @@ class BaseModule(LightningModule, ABC):
     @torch.no_grad()
     def colorize(self, data):
         batch = make_colorization_batch(data)
-        pred,batch_pyramid = self(batch)
+        pred, batch_pyramid = self(batch)
         pred_batch = make_lab_image_batch((pred, batch[1]))
         return pred_batch, batch_pyramid
 
