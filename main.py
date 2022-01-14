@@ -90,6 +90,8 @@ def main(args: Optional[str] = "", **kwargs) -> Union[PreTrainer, ImageGAN, C2FI
     for key, val in kwargs.items():
         vals = [val] if not isinstance(val, (list, tuple)) else val
         args += [f"--{key}", *(str(v) for v in vals)]
+    if not args:  # empty list
+        args = None
     args = make_parser(args).parse_args(args)
     args = adjust_args(args)
 
